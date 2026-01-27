@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFTA API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        .section h2 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #374151;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        button {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1f2937;
+            color: #10b981;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+        .result.error {
+            color: #ef4444;
+        }
+        .result.show {
+            display: block;
+        }
+        .token-display {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f3f4f6;
+            border-radius: 6px;
+            font-size: 12px;
+            word-break: break-all;
+            display: none;
+        }
+        .token-display.show {
+            display: block;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #10b981;
+            color: white;
+        }
+        .status.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 IFTA API Tester</h1>
+            <p>Test Backend Authentication & Endpoints</p>
+            <div id="apiStatus" class="status disconnected">Disconnected</div>
+        </div>
+        
+        <div class="content">
+            <!-- Health Check -->
+            <div class="section">
+                <h2>🏥 Health Check</h2>
+                <button onclick="checkHealth()">Check API Health</button>
+                <div id="healthResult" class="result"></div>
+            </div>
+
+            <!-- Register -->
+            <div class="section">
+                <h2>📝 Register New User</h2>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="regEmail" placeholder="user@example.com" value="test@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="regPassword" placeholder="Min 8 characters" value="password123">
+                </div>
+                <div class="form-group">
+                    <label>Company Name:</label>
+                    <input type="text" id="regCompany" placeholder="My Company" value="Test Company">
+                </div>
+                <div class="form-group">
+                    <label>Phone (optional):</label>
+                    <input type="tel" id="regPhone" placeholder="555-1234" value="555-1234">
+                </div>
+                <button onclick="register()">Register</button>
+                <div id="registerResult" class="result"></div>
+            </div>
+
+            <!-- Login -->
+            <div class="section">
+                <h2>🔑 Login</h2>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="loginEmail" placeholder="user@example.com" value="test@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="loginPassword" placeholder="Your password" value="password123">
+                </div>
+                <button onclick="login()">Login</button>
+                <div id="loginResult" class="result"></div>
+                <div id="tokenDisplay" class="token-display"></div>
+            </div>
+
+            <!-- Get Profile -->
+            <div class="section">
+                <h2>👤 Get Profile</h2>
+                <button onclick="getProfile()">Get My Profile</button>
+                <div id="profileResult" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let authToken = localStorage.getItem('authToken') || '';
+
+        // Check API health on load
+        window.onload = () => {
+            checkHealth();
+            if (authToken) {
+                document.getElementById('tokenDisplay').textContent = `Token: ${authToken.substring(0, 50)}...`;
+                document.getElementById('tokenDisplay').classList.add('show');
+            }
+        };
+
+        async function checkHealth() {
+            const resultDiv = document.getElementById('healthResult');
+            resultDiv.textContent = 'Checking...';
+            resultDiv.classList.add('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.classList.remove('error');
+                
+                const statusEl = document.getElementById('apiStatus');
+                statusEl.textContent = 'Connected';
+                statusEl.classList.remove('disconnected');
+                statusEl.classList.add('connected');
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}\n\nMake sure the server is running on port 5000`;
+                resultDiv.classList.add('error');
+                
+                const statusEl = document.getElementById('apiStatus');
+                statusEl.textContent = 'Disconnected';
+                statusEl.classList.remove('connected');
+                statusEl.classList.add('disconnected');
+            }
+        }
+
+        async function register() {
+            const resultDiv = document.getElementById('registerResult');
+            resultDiv.textContent = 'Registering...';
+            resultDiv.classList.add('show');
+            
+            const formData = new FormData();
+            formData.append('email', document.getElementById('regEmail').value);
+            formData.append('password', document.getElementById('regPassword').value);
+            formData.append('companyName', document.getElementById('regCompany').value);
+            formData.append('phone', document.getElementById('regPhone').value);
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                    resultDiv.classList.remove('error');
+                    
+                    // Auto-save token
+                    if (data.token) {
+                        authToken = data.token;
+                        localStorage.setItem('authToken', authToken);
+                        document.getElementById('tokenDisplay').textContent = `Token: ${authToken.substring(0, 50)}...`;
+                        document.getElementById('tokenDisplay').classList.add('show');
+                    }
+                } else {
+                    resultDiv.textContent = `Error: ${data.error || JSON.stringify(data, null, 2)}`;
+                    resultDiv.classList.add('error');
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.classList.add('error');
+            }
+        }
+
+        async function login() {
+            const resultDiv = document.getElementById('loginResult');
+            resultDiv.textContent = 'Logging in...';
+            resultDiv.classList.add('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: document.getElementById('loginEmail').value,
+                        password: document.getElementById('loginPassword').value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                    resultDiv.classList.remove('error');
+                    
+                    // Save token
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    document.getElementById('tokenDisplay').textContent = `Token: ${authToken.substring(0, 50)}...`;
+                    document.getElementById('tokenDisplay').classList.add('show');
+                } else {
+                    resultDiv.textContent = `Error: ${data.error || JSON.stringify(data, null, 2)}`;
+                    resultDiv.classList.add('error');
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.classList.add('error');
+            }
+        }
+
+        async function getProfile() {
+            if (!authToken) {
+                document.getElementById('profileResult').textContent = 'Error: Please login first';
+                document.getElementById('profileResult').classList.add('show', 'error');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('profileResult');
+            resultDiv.textContent = 'Loading profile...';
+            resultDiv.classList.add('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/users/profile`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.textContent = JSON.stringify(data, null, 2);
+                    resultDiv.classList.remove('error');
+                } else {
+                    resultDiv.textContent = `Error: ${data.error || JSON.stringify(data, null, 2)}`;
+                    resultDiv.classList.add('error');
+                }
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.classList.add('error');
+            }
+        }
+    </script>
+</body>
+</html>
