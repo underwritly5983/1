@@ -1,0 +1,64 @@
+version: '3.8'
+
+# Development docker-compose with hot reload
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ifta_postgres
+    environment:
+      POSTGRES_USER: ifta_user
+      POSTGRES_PASSWORD: ifta_password
+      POSTGRES_DB: ifta_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ifta_user -d ifta_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: ifta_server
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://ifta_user:ifta_password@postgres:5432/ifta_db
+      PORT: 5000
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    command: sh -c "sleep 3 && npm run dev"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: ifta_client
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
