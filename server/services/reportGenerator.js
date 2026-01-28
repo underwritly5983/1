@@ -67,8 +67,13 @@ const generateReport = async (reports, user) => {
   // Convert Set to Array
   aggregatedData.allJurisdictions = Array.from(aggregatedData.allJurisdictions);
 
-  // Organize by jurisdiction for detailed view
-  aggregatedData.jurisdictionData = organizeByJurisdiction(reports);
+  // Organize by jurisdiction for detailed view (only if we have raw text)
+  try {
+    aggregatedData.jurisdictionData = organizeByJurisdiction(reports);
+  } catch (error) {
+    console.error('Error organizing jurisdiction data:', error);
+    aggregatedData.jurisdictionData = { jurisdictions: [], grandTotal: 0 };
+  }
 
   return aggregatedData;
 };
