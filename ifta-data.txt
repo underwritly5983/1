@@ -1,0 +1,12 @@
+# IFTA Total KM Data
+# Format: Quarter Year: Total KM
+# Example: Q1 2025: 12345
+
+# Enter your values here (remove the # to activate a line):
+# Q1 2025: 
+# Q2 2025: 
+# Q3 2025: 
+# Q4 2024: 
+
+# Example (remove # to use):
+# Q1 2025: 12345
