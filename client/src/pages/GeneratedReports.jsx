@@ -28,24 +28,31 @@ const GeneratedReports = () => {
   const handleView = async (id) => {
     try {
       const response = await axios.get(`/reports/generated/${id}`)
-      setSelectedReport(response.data.report)
+      const report = response.data.report
+      // Parse report_data if it's a string
+      if (typeof report.report_data === 'string') {
+        report.report_data = JSON.parse(report.report_data)
+      }
+      setSelectedReport(report)
     } catch (error) {
       toast.error('Failed to fetch report details')
     }
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this report?')) return
+    if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return
 
     try {
       await axios.delete(`/reports/generated/${id}`)
-      toast.success('Report deleted')
+      toast.success('Report deleted successfully')
       fetchReports()
       if (selectedReport?.id === id) {
         setSelectedReport(null)
       }
     } catch (error) {
-      toast.error('Failed to delete report')
+      console.error('Delete error:', error)
+      const errorMessage = error.response?.data?.error || 'Failed to delete report'
+      toast.error(errorMessage)
     }
   }
 
@@ -181,6 +188,56 @@ const GeneratedReports = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Jurisdiction Breakdown */}
+                  {selectedReport.report_data.jurisdictionData && selectedReport.report_data.jurisdictionData.jurisdictions && selectedReport.report_data.jurisdictionData.jurisdictions.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Jurisdiction Breakdown</h3>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jurisdiction</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q1</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q2</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q3</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q4</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total KM</th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% of Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {selectedReport.report_data.jurisdictionData.jurisdictions.map((juris, index) => (
+                              <tr key={index} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {juris.code}
+                                </td>
+                                {juris.quarters.map((q, qIdx) => (
+                                  <td key={qIdx} className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
+                                    {q ? q.km.toLocaleString() : '-'}
+                                  </td>
+                                ))}
+                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
+                                  {juris.totalKM.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium text-primary-600">
+                                  {juris.percentage.toFixed(2)}%
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-primary-50 font-semibold">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">Grand Total</td>
+                              <td colSpan="4" className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900"></td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
+                                {selectedReport.report_data.jurisdictionData.grandTotal.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">100.00%</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Quarters */}
                   {selectedReport.report_data.quarters && selectedReport.report_data.quarters.length > 0 && (

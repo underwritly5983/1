@@ -564,7 +564,7 @@ router.get('/generated/list', authenticate, async (req, res) => {
 router.get('/generated/:id', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, report_name, report_data, created_at, updated_at
+      `SELECT id, report_name, report_data, created_at, updated_at, file_path
        FROM generated_reports
        WHERE id = $1 AND user_id = $2`,
       [req.params.id, req.user.id]
@@ -578,6 +578,39 @@ router.get('/generated/:id', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get generated report error:', error);
     res.status(500).json({ error: 'Failed to fetch report' });
+  }
+});
+
+// Delete generated report
+router.delete('/generated/:id', authenticate, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT file_path FROM generated_reports WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    // Delete PDF file if it exists
+    const filePath = result.rows[0].file_path;
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (fileError) {
+        console.error('Error deleting file:', fileError);
+        // Continue even if file deletion fails
+      }
+    }
+
+    // Delete from database
+    await db.query('DELETE FROM generated_reports WHERE id = $1', [req.params.id]);
+
+    res.json({ message: 'Report deleted successfully' });
+  } catch (error) {
+    console.error('Delete generated report error:', error);
+    res.status(500).json({ error: 'Failed to delete report' });
   }
 });
 
