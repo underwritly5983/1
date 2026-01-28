@@ -1,26 +1,60 @@
 // Extract jurisdiction-level data from IFTA report text
+// IMPORTANT: We prefer the PDF's "Total KM" column per jurisdiction (not Txbl KM).
 const extractJurisdictionData = (text) => {
   const jurisdictions = [];
-  
-  // Pattern to match jurisdiction rows: "Diesel [Jurisdiction] False [Txbl KM] [Total KM] [Litres] ..."
-  // Example: "Diesel AB False 31,052 31,052 12,521 12,184 0.1300 $43.81"
-  const rowPattern = /Diesel\s+(\w{2,3})\s+False\s+(\d+(?:,\d+)*)\s+(\d+(?:,\d+)*)/g;
-  
-  let match;
-  while ((match = rowPattern.exec(text)) !== null) {
-    const jurisdiction = match[1].toUpperCase();
-    const txblKM = parseFloat(match[2].replace(/,/g, ''));
-    const totalKM = parseFloat(match[3].replace(/,/g, ''));
-    
-    if (!isNaN(txblKM) && !isNaN(totalKM) && txblKM > 0) {
-      jurisdictions.push({
-        code: jurisdiction,
-        txblKM: txblKM,
-        totalKM: totalKM
-      });
+
+  if (!text) return jurisdictions;
+
+  // Many PDFs collapse whitespace between columns, e.g.:
+  // "DieselABFalse31,05231,05212,521..."
+  // So we find each Diesel row header, then parse the first numeric field after it.
+  const headerRe = /Diesel\s*([A-Z]{2,3})\s*(True|False)/gi;
+  const matches = [];
+  let m;
+  while ((m = headerRe.exec(text)) !== null) {
+    matches.push({
+      code: String(m[1] || '').toUpperCase(),
+      start: headerRe.lastIndex
+    });
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const code = matches[i].code;
+    const start = matches[i].start;
+    const end = i + 1 < matches.length ? matches[i + 1].start - 1 : text.length;
+    const tailRaw = text.slice(start, end);
+    const tail = tailRaw.replace(/\s+/g, ''); // collapse whitespace
+
+    // 1) If the first value uses thousand separators, grab the whole grouped number.
+    let kmStr = null;
+    const commaNum = tail.match(/^(\d{1,3}(?:,\d{3})+)/);
+    if (commaNum && commaNum[1]) {
+      kmStr = commaNum[1];
+    } else {
+      // 2) Otherwise grab a digit run and try to detect repeated Txbl+Total like "394394" or "70167016"
+      const digitsRunMatch = tail.match(/^(\d{2,14})/);
+      const digitsRun = digitsRunMatch ? digitsRunMatch[1] : null;
+      if (digitsRun) {
+        let chosen = null;
+        const maxUnit = Math.min(7, Math.floor(digitsRun.length / 2));
+        for (let unitLen = 2; unitLen <= maxUnit; unitLen++) {
+          const a = digitsRun.slice(0, unitLen);
+          const b = digitsRun.slice(unitLen, unitLen * 2);
+          if (a === b) {
+            chosen = a;
+            break;
+          }
+        }
+        kmStr = chosen || digitsRun;
+      }
+    }
+
+    const totalKM = kmStr ? parseFloat(kmStr.replace(/,/g, '')) : NaN;
+    if (code && !isNaN(totalKM) && totalKM > 0) {
+      jurisdictions.push({ code, txblKM: 0, totalKM });
     }
   }
-  
+
   return jurisdictions;
 };
 
@@ -71,10 +105,11 @@ const organizeByJurisdiction = (reports) => {
       }
       
       const jurisData = jurisdictionMap.get(j.code);
+      // Use Total KM per jurisdiction per quarter (matches user's IFTA SUMMARY.xlsx expectation)
       jurisData.quarters[quarterIndex] = {
         quarter: quarter,
         year: year,
-        km: j.txblKM || j.totalKM || 0
+        km: j.totalKM || 0
       };
     });
   });

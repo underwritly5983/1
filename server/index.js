@@ -31,27 +31,33 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting - more lenient for auth endpoints
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Rate limiting
+// NOTE: In development, rate limiting breaks UX (polling, uploads, etc.).
+// We only enforce strict rate limits in production.
+if (process.env.NODE_ENV === 'production') {
+  const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // general API traffic
+    message: 'Too many requests, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Don't double-limit auth endpoints
+    skip: (req) => req.path.startsWith('/auth/'),
+  });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit auth endpoints to 50 requests per windowMs (more lenient)
-  message: 'Too many login attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful logins
-});
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 50, // auth endpoints
+    message: 'Too many login attempts, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+  });
 
-// Apply rate limiting - auth routes first, then general
-app.use('/api/auth/', authLimiter);
-app.use('/api/', generalLimiter);
+  // Apply rate limiting - auth routes first, then general
+  app.use('/api/auth/', authLimiter);
+  app.use('/api/', generalLimiter);
+}
 
 // Serve uploaded files
 app.use('/uploads', express.static(uploadDir));

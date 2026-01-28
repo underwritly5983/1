@@ -75,6 +75,8 @@ const generateReport = async (reports, user) => {
       const { calculateCANvsUS } = require('./jurisdictionClassifier');
       aggregatedData.jurisdictionData.canVsUs = calculateCANvsUS(aggregatedData.jurisdictionData.jurisdictions);
     }
+    // Surface Total KM explicitly at top-level totals for UI/exports
+    aggregatedData.totals.totalKM = aggregatedData.jurisdictionData.grandTotal || 0;
   } catch (error) {
     console.error('Error organizing jurisdiction data:', error);
     aggregatedData.jurisdictionData = { 
@@ -82,6 +84,7 @@ const generateReport = async (reports, user) => {
       grandTotal: 0,
       canVsUs: { can: { total: 0, percentage: 0 }, us: { total: 0, percentage: 0 }, grandTotal: 0 }
     };
+    aggregatedData.totals.totalKM = 0;
   }
 
   return aggregatedData;

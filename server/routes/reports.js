@@ -87,14 +87,21 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
         console.log(`PDF parsed successfully, text length: ${pdfData.text.length}`);
         
         // Extract quarter information
-        const quarterInfo = extractQuarterInfo(pdfData.text);
+        // Determine quarter/year using FIRST PAGE period dates (not filename)
+        let quarterInfo = extractQuarterInfo(pdfData.firstPageText || '');
+        // Fallback: if first page didn’t contain period dates, use full text
+        if (!quarterInfo.quarter || !quarterInfo.year) {
+          quarterInfo = extractQuarterInfo(pdfData.text || '');
+        }
         
         // Check if report is older than 6 months
         const isOldReport = checkReportAge(quarterInfo.detectedDate);
         
         // Store report in database
-        const rawTextToStore = pdfData.text.length > 200000 
-          ? pdfData.text.substring(0, 200000) 
+        // Store enough text to include the jurisdiction table.
+        // Some PDFs place the table later, so 200k can truncate it.
+        const rawTextToStore = pdfData.text.length > 2000000
+          ? pdfData.text.substring(0, 2000000)
           : pdfData.text;
         
         const result = await db.query(
@@ -399,14 +406,17 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     const pdfData = await parsePDF(filePath);
     
     // Extract quarter information
-    const quarterInfo = extractQuarterInfo(pdfData.text);
+    let quarterInfo = extractQuarterInfo(pdfData.firstPageText || '');
+    if (!quarterInfo.quarter || !quarterInfo.year) {
+      quarterInfo = extractQuarterInfo(pdfData.text || '');
+    }
     
     // Check if report is older than 6 months
     const isOldReport = checkReportAge(quarterInfo.detectedDate);
     
     // Store report in database (store more text for jurisdiction extraction)
-    const rawTextToStore = pdfData.text.length > 200000 
-      ? pdfData.text.substring(0, 200000) 
+    const rawTextToStore = pdfData.text.length > 2000000
+      ? pdfData.text.substring(0, 2000000)
       : pdfData.text;
     
     const result = await db.query(
