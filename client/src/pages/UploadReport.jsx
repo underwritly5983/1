@@ -56,19 +56,29 @@ const UploadReport = () => {
         toast.success(`${files.length} report(s) uploaded successfully! Processing...`)
       }
 
-      // If auto-generate is enabled and we have a summary PDF, offer download
-      if (response.data.summaryPdfUrl) {
+      // If auto-generate is enabled and we have a generated report, navigate to it
+      if (response.data.generatedReportId) {
+        toast.success('Summary report generated!', { duration: 5000 })
+        // Redirect to the generated report view
+        setTimeout(() => {
+          navigate(`/reports/jurisdiction/${response.data.generatedReportId}`)
+        }, 2000)
+      } else if (response.data.summaryPdfUrl) {
         toast.success('Summary PDF generated!', { duration: 5000 })
-        // Auto-download the summary PDF
+        // Auto-download the summary PDF if no report ID
         setTimeout(() => {
           window.open(response.data.summaryPdfUrl, '_blank')
         }, 2000)
+        // Redirect to generated reports page
+        setTimeout(() => {
+          navigate('/reports/generated')
+        }, 3000)
+      } else {
+        // Redirect to reports list if no summary generated
+        setTimeout(() => {
+          navigate('/reports')
+        }, 2000)
       }
-
-      // Redirect after a delay
-      setTimeout(() => {
-        navigate('/reports')
-      }, 3000)
     } catch (error) {
       console.error('Upload error:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Upload failed';

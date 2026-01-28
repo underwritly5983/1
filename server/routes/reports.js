@@ -42,7 +42,23 @@ const upload = multer({
 });
 
 // Upload multiple IFTA reports and generate summary PDF
-router.post('/upload-multiple', authenticate, upload.array('files', 4), async (req, res) => {
+router.post('/upload-multiple', authenticate, (req, res, next) => {
+  upload.array('files', 4)(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ error: 'Maximum 4 files allowed' });
+      }
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size exceeds 10MB limit' });
+      }
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    }
+    if (err) {
+      return res.status(400).json({ error: err.message || 'File upload error' });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     console.log('Upload-multiple endpoint called');
     console.log('Files received:', req.files ? req.files.length : 0);
@@ -225,7 +241,30 @@ router.post('/upload-multiple', authenticate, upload.array('files', 4), async (r
             const pdfPath = path.join(summariesDir, pdfFilename);
             fs.writeFileSync(pdfPath, pdfBuffer);
 
+            // Save generated report to database
+            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
+            const saveResult = await db.query(
+              `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
+              [
+                req.user.id,
+                reportName,
+                JSON.stringify(reportData),
+                pdfPath,
+                'auto-generated'
+              ]
+            );
+
             summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
+            
+            // Return the generated report ID so frontend can navigate to it
+            return res.json({
+              message: `${req.files.length} file(s) uploaded successfully`,
+              results,
+              summaryPdfUrl,
+              generatedReportId: saveResult.rows[0].id
+            });
           }
         }
       } catch (error) {
