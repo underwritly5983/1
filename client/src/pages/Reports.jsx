@@ -73,10 +73,16 @@ const Reports = () => {
           <h1 className="text-3xl font-bold text-gray-900">IFTA Reports</h1>
           <p className="text-gray-600 mt-1">Manage and view your uploaded reports</p>
         </div>
-        <Link to="/reports/upload" className="btn-primary inline-flex items-center">
-          <Upload className="h-5 w-5 mr-2" />
-          Upload Report
-        </Link>
+        <div className="flex items-center space-x-3">
+          <Link to="/reports/generated" className="btn-secondary inline-flex items-center">
+            <FileText className="h-5 w-5 mr-2" />
+            View Generated Reports
+          </Link>
+          <Link to="/reports/upload" className="btn-primary inline-flex items-center">
+            <Upload className="h-5 w-5 mr-2" />
+            Upload Report
+          </Link>
+        </div>
       </div>
 
       {reports.length === 0 ? (
