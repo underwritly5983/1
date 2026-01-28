@@ -586,6 +586,13 @@ router.post('/generate-summary', authenticate, async (req, res) => {
         name: reportName || 'IFTA Summary Report',
         data: reportData,
         createdAt: saveResult.rows[0].created_at
+      },
+      // Include jurisdiction summary for immediate display
+      summary: {
+        totalJurisdictions: reportData.jurisdictionData?.jurisdictions?.length || 0,
+        grandTotalKM: reportData.jurisdictionData?.grandTotal || 0,
+        canTotal: reportData.jurisdictionData?.canVsUs?.can?.total || 0,
+        usTotal: reportData.jurisdictionData?.canVsUs?.us?.total || 0
       }
     });
   } catch (error) {

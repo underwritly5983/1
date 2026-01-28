@@ -47,14 +47,26 @@ const GenerateReport = () => {
       return
     }
 
+    if (selectedReports.size < 4) {
+      const proceed = window.confirm(
+        'You have selected fewer than 4 reports. For a complete annual summary, you typically need Q1, Q2, Q3, and Q4. Continue anyway?'
+      )
+      if (!proceed) return
+    }
+
     setGenerating(true)
     try {
       const response = await axios.post('/reports/generate-summary', {
         reportIds: Array.from(selectedReports),
-        reportName: reportName || 'IFTA Summary Report'
+        reportName: reportName || `IFTA Summary - ${new Date().toLocaleDateString()}`
       })
       toast.success('Report generated successfully!')
-      navigate('/reports/generated')
+      // Navigate to the jurisdiction report view
+      if (response.data.report?.id) {
+        navigate(`/reports/jurisdiction/${response.data.report.id}`)
+      } else {
+        navigate('/reports/generated')
+      }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to generate report')
     } finally {
