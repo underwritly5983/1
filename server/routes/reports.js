@@ -7,7 +7,7 @@ const db = require('../config/database');
 const { parsePDF, extractQuarterInfo } = require('../services/pdfParser');
 const { summarizeIFTAReport, checkReportAge } = require('../services/aiService');
 const { generateReport, generateTemplateExcel } = require('../services/reportGenerator');
-const path = require('path');
+const { generateSummaryPDF } = require('../services/pdfGenerator');
 
 const router = express.Router();
 
@@ -28,7 +28,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024 }, // 10MB
+  limits: { 
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024, // 10MB per file
+    files: 4 // Maximum 4 files
+  },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
@@ -38,7 +41,178 @@ const upload = multer({
   }
 });
 
-// Upload IFTA report
+// Upload multiple IFTA reports and generate summary PDF
+router.post('/upload-multiple', authenticate, upload.array('files', 4), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const autoGenerate = req.body.autoGenerate === 'true';
+    const results = [];
+    const reportIds = [];
+
+    // Process each file
+    for (const file of req.files) {
+      try {
+        const filePath = file.path;
+        const fileName = file.originalname;
+        const fileSize = file.size;
+
+        // Parse PDF
+        const pdfData = await parsePDF(filePath);
+        
+        // Extract quarter information
+        const quarterInfo = extractQuarterInfo(pdfData.text);
+        
+        // Check if report is older than 6 months
+        const isOldReport = checkReportAge(quarterInfo.detectedDate);
+        
+        // Store report in database
+        const rawTextToStore = pdfData.text.length > 200000 
+          ? pdfData.text.substring(0, 200000) 
+          : pdfData.text;
+        
+        const result = await db.query(
+          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING id, quarter_label, year, detected_date, status`,
+          [
+            req.user.id,
+            fileName,
+            filePath,
+            fileSize,
+            quarterInfo.quarter,
+            quarterInfo.year,
+            quarterInfo.quarter,
+            quarterInfo.detectedDate,
+            rawTextToStore,
+            'processing'
+          ]
+        );
+
+        const report = result.rows[0];
+        reportIds.push(report.id);
+
+        // Track analytics
+        await db.query(
+          'INSERT INTO usage_analytics (user_id, event_type, event_data) VALUES ($1, $2, $3)',
+          [req.user.id, 'report_uploaded', JSON.stringify({ reportId: report.id, fileName })]
+        );
+
+        // Process summary in background (async)
+        summarizeIFTAReport(pdfData.text, quarterInfo.quarter, quarterInfo.year)
+          .then(async (summary) => {
+            await db.query(
+              'UPDATE ifta_reports SET summary = $1, status = $2 WHERE id = $3',
+              [JSON.stringify(summary), 'completed', report.id]
+            );
+          })
+          .catch(async (error) => {
+            console.error('Summary processing error:', error);
+            await db.query(
+              'UPDATE ifta_reports SET status = $1 WHERE id = $2',
+              ['error', report.id]
+            );
+          });
+
+        results.push({
+          fileName,
+          report: {
+            id: report.id,
+            quarter: report.quarter_label,
+            year: report.year,
+            detectedDate: report.detected_date,
+            status: report.status,
+            isOldReport
+          },
+          warning: isOldReport ? 'This report appears to be older than 6 months. Please verify the data is current.' : null
+        });
+      } catch (error) {
+        console.error(`Error processing ${file.originalname}:`, error);
+        results.push({
+          fileName: file.originalname,
+          error: error.message || 'Failed to process file'
+        });
+      }
+    }
+
+    // If auto-generate is enabled and we have reports, generate summary PDF
+    let summaryPdfUrl = null;
+    if (autoGenerate && reportIds.length > 0) {
+      try {
+        // Wait a bit for processing to start
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Get user branding
+        const userResult = await db.query(
+          'SELECT company_name, logo_url, brand_color_primary, brand_color_secondary FROM users WHERE id = $1',
+          [req.user.id]
+        );
+        const user = userResult.rows[0];
+
+        // Get reports with raw text
+        const reportsResult = await db.query(
+          `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text
+           FROM ifta_reports
+           WHERE id = ANY($1::int[]) AND user_id = $2`,
+          [reportIds, req.user.id]
+        );
+
+        if (reportsResult.rows.length > 0) {
+          const reports = reportsResult.rows.map(r => ({
+            id: r.id,
+            fileName: r.file_name,
+            quarter: r.quarter_label,
+            year: r.year,
+            summary: r.summary,
+            detectedDate: r.detected_date,
+            rawText: r.raw_text
+          }));
+
+          // Sort chronologically
+          reports.sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            const qOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+            return (qOrder[a.quarter] || 0) - (qOrder[b.quarter] || 0);
+          });
+
+          // Generate report data
+          const reportData = await generateReport(reports, user);
+
+          // Generate and save summary PDF
+          const pdfBuffer = await generateSummaryPDF(reportData, user);
+          
+          // Save PDF to file
+          const pdfFilename = `summary-${req.user.id}-${Date.now()}.pdf`;
+          const uploadDir = process.env.UPLOAD_DIR || './uploads';
+          const summariesDir = path.join(uploadDir, 'summaries');
+          if (!fs.existsSync(summariesDir)) {
+            fs.mkdirSync(summariesDir, { recursive: true });
+          }
+          const pdfPath = path.join(summariesDir, pdfFilename);
+          fs.writeFileSync(pdfPath, pdfBuffer);
+
+          summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
+        }
+      } catch (error) {
+        console.error('Error generating summary PDF:', error);
+        // Don't fail the upload if PDF generation fails
+      }
+    }
+
+    res.json({
+      message: `${req.files.length} file(s) uploaded successfully`,
+      results,
+      summaryPdfUrl
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload reports' });
+  }
+});
+
+// Upload single IFTA report (keep for backward compatibility)
 router.post('/upload', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {

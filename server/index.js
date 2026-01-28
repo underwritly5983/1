@@ -40,6 +40,12 @@ app.use('/api/', limiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(uploadDir));
+// Also serve summaries
+const summariesDir = path.join(uploadDir, 'summaries');
+if (!fs.existsSync(summariesDir)) {
+  fs.mkdirSync(summariesDir, { recursive: true });
+}
+app.use('/uploads/summaries', express.static(summariesDir));
 
 // Routes
 app.use('/api/auth', authRoutes);
