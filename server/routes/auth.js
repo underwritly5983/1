@@ -131,10 +131,12 @@ router.post('/login',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log('Login validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
       const { email, password } = req.body;
+      console.log('Login attempt for:', email);
 
       // Find user
       const result = await db.query(
@@ -143,6 +145,7 @@ router.post('/login',
       );
 
       if (result.rows.length === 0) {
+        console.log('User not found:', email);
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
@@ -151,8 +154,11 @@ router.post('/login',
       // Verify password
       const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
+        console.log('Invalid password for:', email);
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+      
+      console.log('Login successful for:', email);
 
       // Update last login
       await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
