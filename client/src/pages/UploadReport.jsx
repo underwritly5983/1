@@ -70,7 +70,12 @@ const UploadReport = () => {
         navigate('/reports')
       }, 3000)
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Upload failed')
+      console.error('Upload error:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Upload failed';
+      toast.error(errorMessage, { duration: 8000 });
+      if (error.response?.data?.details) {
+        console.error('Error details:', error.response.data.details);
+      }
     } finally {
       setUploading(false)
     }

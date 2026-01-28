@@ -44,7 +44,12 @@ const upload = multer({
 // Upload multiple IFTA reports and generate summary PDF
 router.post('/upload-multiple', authenticate, upload.array('files', 4), async (req, res) => {
   try {
+    console.log('Upload-multiple endpoint called');
+    console.log('Files received:', req.files ? req.files.length : 0);
+    console.log('Body:', req.body);
+    
     if (!req.files || req.files.length === 0) {
+      console.error('No files in request');
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
@@ -55,12 +60,15 @@ router.post('/upload-multiple', authenticate, upload.array('files', 4), async (r
     // Process each file
     for (const file of req.files) {
       try {
+        console.log(`Processing file: ${file.originalname}`);
         const filePath = file.path;
         const fileName = file.originalname;
         const fileSize = file.size;
 
         // Parse PDF
+        console.log(`Parsing PDF: ${filePath}`);
         const pdfData = await parsePDF(filePath);
+        console.log(`PDF parsed successfully, text length: ${pdfData.text.length}`);
         
         // Extract quarter information
         const quarterInfo = extractQuarterInfo(pdfData.text);
@@ -151,24 +159,48 @@ router.post('/upload-multiple', authenticate, upload.array('files', 4), async (r
         );
         const user = userResult.rows[0];
 
-        // Get reports with raw text
-        const reportsResult = await db.query(
-          `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text
-           FROM ifta_reports
-           WHERE id = ANY($1::int[]) AND user_id = $2`,
-          [reportIds, req.user.id]
-        );
+        // Get reports with raw text - wait for summaries to be ready
+        // Poll for up to 30 seconds for summaries to be completed
+        let reportsResult;
+        let attempts = 0;
+        const maxAttempts = 15;
+        
+        while (attempts < maxAttempts) {
+          reportsResult = await db.query(
+            `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+             FROM ifta_reports
+             WHERE id = ANY($1::int[]) AND user_id = $2`,
+            [reportIds, req.user.id]
+          );
+          
+          // Check if all reports have summaries (status = 'completed')
+          const allCompleted = reportsResult.rows.every(r => r.status === 'completed' && r.summary);
+          if (allCompleted || attempts >= maxAttempts - 1) {
+            break;
+          }
+          
+          // Wait 2 seconds before next attempt
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          attempts++;
+        }
 
         if (reportsResult.rows.length > 0) {
-          const reports = reportsResult.rows.map(r => ({
-            id: r.id,
-            fileName: r.file_name,
-            quarter: r.quarter_label,
-            year: r.year,
-            summary: r.summary,
-            detectedDate: r.detected_date,
-            rawText: r.raw_text
-          }));
+          // Filter out reports without summaries
+          const reportsWithSummaries = reportsResult.rows.filter(r => r.summary && r.status === 'completed');
+          
+          if (reportsWithSummaries.length === 0) {
+            console.warn('No reports with completed summaries yet, skipping PDF generation');
+            // Don't fail, just skip PDF generation
+          } else {
+            const reports = reportsWithSummaries.map(r => ({
+              id: r.id,
+              fileName: r.file_name,
+              quarter: r.quarter_label,
+              year: r.year,
+              summary: r.summary,
+              detectedDate: r.detected_date,
+              rawText: r.raw_text
+            }));
 
           // Sort chronologically
           reports.sort((a, b) => {
@@ -177,23 +209,24 @@ router.post('/upload-multiple', authenticate, upload.array('files', 4), async (r
             return (qOrder[a.quarter] || 0) - (qOrder[b.quarter] || 0);
           });
 
-          // Generate report data
-          const reportData = await generateReport(reports, user);
+            // Generate report data
+            const reportData = await generateReport(reports, user);
 
-          // Generate and save summary PDF
-          const pdfBuffer = await generateSummaryPDF(reportData, user);
-          
-          // Save PDF to file
-          const pdfFilename = `summary-${req.user.id}-${Date.now()}.pdf`;
-          const uploadDir = process.env.UPLOAD_DIR || './uploads';
-          const summariesDir = path.join(uploadDir, 'summaries');
-          if (!fs.existsSync(summariesDir)) {
-            fs.mkdirSync(summariesDir, { recursive: true });
+            // Generate and save summary PDF
+            const pdfBuffer = await generateSummaryPDF(reportData, user);
+            
+            // Save PDF to file
+            const pdfFilename = `summary-${req.user.id}-${Date.now()}.pdf`;
+            const uploadDir = process.env.UPLOAD_DIR || './uploads';
+            const summariesDir = path.join(uploadDir, 'summaries');
+            if (!fs.existsSync(summariesDir)) {
+              fs.mkdirSync(summariesDir, { recursive: true });
+            }
+            const pdfPath = path.join(summariesDir, pdfFilename);
+            fs.writeFileSync(pdfPath, pdfBuffer);
+
+            summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
           }
-          const pdfPath = path.join(summariesDir, pdfFilename);
-          fs.writeFileSync(pdfPath, pdfBuffer);
-
-          summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
         }
       } catch (error) {
         console.error('Error generating summary PDF:', error);
@@ -208,7 +241,11 @@ router.post('/upload-multiple', authenticate, upload.array('files', 4), async (r
     });
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ error: 'Failed to upload reports' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to upload reports',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

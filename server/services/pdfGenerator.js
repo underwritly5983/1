@@ -20,8 +20,8 @@ const generateSummaryPDF = async (reportData, user) => {
       // Title
       doc.fontSize(20).font('Helvetica-Bold').text('IFTA Summary Report', { align: 'center' });
       doc.moveDown(0.5);
-      doc.fontSize(14).font('Helvetica').text(user.company_name, { align: 'center' });
-      doc.fontSize(10).text(`Generated: ${new Date(reportData.generatedAt).toLocaleDateString()}`, { align: 'center' });
+      doc.fontSize(14).font('Helvetica').text(user.company_name || 'Company Name', { align: 'center' });
+      doc.fontSize(10).text(`Generated: ${new Date(reportData.generatedAt || Date.now()).toLocaleDateString()}`, { align: 'center' });
       doc.moveDown(1);
 
       // Summary totals
