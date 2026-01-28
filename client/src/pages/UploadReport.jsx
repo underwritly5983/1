@@ -74,9 +74,10 @@ const UploadReport = () => {
           navigate('/reports/generated')
         }, 3000)
       } else {
-        // Redirect to reports list if no summary generated
+        // Always redirect to generated reports page, not individual reports
+        toast.success('Reports uploaded! Processing summaries...', { duration: 4000 })
         setTimeout(() => {
-          navigate('/reports')
+          navigate('/reports/generated')
         }, 2000)
       }
     } catch (error) {
