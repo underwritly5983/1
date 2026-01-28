@@ -70,9 +70,18 @@ const generateReport = async (reports, user) => {
   // Organize by jurisdiction for detailed view (only if we have raw text)
   try {
     aggregatedData.jurisdictionData = organizeByJurisdiction(reports);
+    // Ensure canVsUs is included
+    if (!aggregatedData.jurisdictionData.canVsUs) {
+      const { calculateCANvsUS } = require('./jurisdictionClassifier');
+      aggregatedData.jurisdictionData.canVsUs = calculateCANvsUS(aggregatedData.jurisdictionData.jurisdictions);
+    }
   } catch (error) {
     console.error('Error organizing jurisdiction data:', error);
-    aggregatedData.jurisdictionData = { jurisdictions: [], grandTotal: 0 };
+    aggregatedData.jurisdictionData = { 
+      jurisdictions: [], 
+      grandTotal: 0,
+      canVsUs: { can: { total: 0, percentage: 0 }, us: { total: 0, percentage: 0 }, grandTotal: 0 }
+    };
   }
 
   return aggregatedData;

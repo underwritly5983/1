@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { Download, FileText, ArrowLeft, FileDown } from 'lucide-react'
 import { format } from 'date-fns'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const JurisdictionReport = () => {
   const { id } = useParams()
@@ -277,28 +278,104 @@ const JurisdictionReport = () => {
         </div>
       </div>
 
-      {/* Chart Visualization */}
+      {/* CAN vs US Charts */}
+      {jurisdictionData.canVsUs && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Pie Chart - CAN vs US */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">CAN vs US Distribution</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Canada', value: jurisdictionData.canVsUs.can.total, fill: '#ef4444' },
+                    { name: 'United States', value: jurisdictionData.canVsUs.us.total, fill: '#3b82f6' }
+                  ]}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  <Cell fill="#ef4444" />
+                  <Cell fill="#3b82f6" />
+                </Pie>
+                <Tooltip formatter={(value) => value.toLocaleString() + ' KM'} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-4 grid grid-cols-2 gap-4 text-center">
+              <div className="bg-red-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">Canada</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {jurisdictionData.canVsUs.can.total.toLocaleString()} KM
+                </p>
+                <p className="text-sm text-gray-500">
+                  {jurisdictionData.canVsUs.can.percentage.toFixed(2)}%
+                </p>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">United States</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {jurisdictionData.canVsUs.us.total.toLocaleString()} KM
+                </p>
+                <p className="text-sm text-gray-500">
+                  {jurisdictionData.canVsUs.us.percentage.toFixed(2)}%
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bar Chart - Top Jurisdictions */}
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Jurisdictions</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={jurisdictionData.jurisdictions.slice(0, 10).map(j => ({
+                name: j.code,
+                'Total KM': j.totalKM
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip formatter={(value) => value.toLocaleString() + ' KM'} />
+                <Bar dataKey="Total KM" fill="#2563eb" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Quarterly Breakdown Chart */}
       {jurisdictionData.jurisdictions.length > 0 && (
         <div className="card">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Jurisdictions by KM</h3>
-          <div className="space-y-3">
-            {jurisdictionData.jurisdictions.slice(0, 10).map((juris, index) => (
-              <div key={index}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-700">{juris.code}</span>
-                  <span className="text-sm text-gray-600">
-                    {juris.totalKM.toLocaleString()} km ({juris.percentage.toFixed(2)}%)
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-primary-600 h-2 rounded-full transition-all"
-                    style={{ width: `${juris.percentage}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quarterly KM Breakdown</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={[
+              {
+                name: 'Q1',
+                KM: jurisdictionData.jurisdictions.reduce((sum, j) => sum + (j.quarters[0]?.km || 0), 0)
+              },
+              {
+                name: 'Q2',
+                KM: jurisdictionData.jurisdictions.reduce((sum, j) => sum + (j.quarters[1]?.km || 0), 0)
+              },
+              {
+                name: 'Q3',
+                KM: jurisdictionData.jurisdictions.reduce((sum, j) => sum + (j.quarters[2]?.km || 0), 0)
+              },
+              {
+                name: 'Q4',
+                KM: jurisdictionData.jurisdictions.reduce((sum, j) => sum + (j.quarters[3]?.km || 0), 0)
+              }
+            ]}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => value.toLocaleString() + ' KM'} />
+              <Bar dataKey="KM" fill="#10b981" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
     </div>

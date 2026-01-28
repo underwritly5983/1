@@ -26,6 +26,7 @@ const extractJurisdictionData = (text) => {
 
 // Extract jurisdiction data from all reports and organize by jurisdiction
 const organizeByJurisdiction = (reports) => {
+  const { calculateCANvsUS } = require('./jurisdictionClassifier');
   const jurisdictionMap = new Map();
   const quarterMap = {
     'Q1': 0,
@@ -99,10 +100,14 @@ const organizeByJurisdiction = (reports) => {
   // Sort by total KM descending
   allJurisdictions.sort((a, b) => b.totalKM - a.totalKM);
   
+  // Calculate CAN vs US breakdown
+  const canVsUs = calculateCANvsUS(allJurisdictions);
+  
   return {
     jurisdictions: allJurisdictions,
     grandTotal: grandTotal,
-    quarters: ['Q1', 'Q2', 'Q3', 'Q4']
+    quarters: ['Q1', 'Q2', 'Q3', 'Q4'],
+    canVsUs: canVsUs
   };
 };
 

@@ -65,13 +65,29 @@ const generateSummaryPDF = async (reportData, user) => {
         });
       }
 
+      // CAN vs US Summary
+      if (reportData.jurisdictionData && reportData.jurisdictionData.canVsUs) {
+        if (doc.y > 650) {
+          doc.addPage();
+        }
+        const canVsUs = reportData.jurisdictionData.canVsUs;
+        
+        doc.fontSize(14).font('Helvetica-Bold').text('CAN vs US Summary', { underline: true });
+        doc.moveDown(0.3);
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Canada: ${canVsUs.can.total.toLocaleString()} KM (${canVsUs.can.percentage.toFixed(2)}%)`, 50, doc.y);
+        doc.moveDown(0.4);
+        doc.text(`United States: ${canVsUs.us.total.toLocaleString()} KM (${canVsUs.us.percentage.toFixed(2)}%)`, 50, doc.y);
+        doc.moveDown(1);
+      }
+
       // Jurisdiction table
       if (reportData.jurisdictionData && reportData.jurisdictionData.jurisdictions.length > 0) {
         if (doc.y > 600) {
           doc.addPage();
         }
 
-        doc.fontSize(14).font('Helvetica-Bold').text('Jurisdiction Summary', { underline: true });
+        doc.fontSize(14).font('Helvetica-Bold').text('Jurisdiction Summary by State/Province/Territory', { underline: true });
         doc.moveDown(0.5);
 
         // Table headers
