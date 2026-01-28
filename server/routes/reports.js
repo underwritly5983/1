@@ -6,7 +6,8 @@ const { authenticate } = require('../middleware/auth');
 const db = require('../config/database');
 const { parsePDF, extractQuarterInfo } = require('../services/pdfParser');
 const { summarizeIFTAReport, checkReportAge } = require('../services/aiService');
-const { generateReport } = require('../services/reportGenerator');
+const { generateReport, generateTemplateExcel } = require('../services/reportGenerator');
+const path = require('path');
 
 const router = express.Router();
 
@@ -57,7 +58,11 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     // Check if report is older than 6 months
     const isOldReport = checkReportAge(quarterInfo.detectedDate);
     
-    // Store report in database
+    // Store report in database (store more text for jurisdiction extraction)
+    const rawTextToStore = pdfData.text.length > 200000 
+      ? pdfData.text.substring(0, 200000) 
+      : pdfData.text;
+    
     const result = await db.query(
       `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -71,7 +76,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
         quarterInfo.year,
         quarterInfo.quarter,
         quarterInfo.detectedDate,
-        pdfData.text.substring(0, 50000), // Store first 50k chars
+        rawTextToStore,
         'processing'
       ]
     );
@@ -218,9 +223,9 @@ router.post('/generate-summary', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Report IDs required' });
     }
 
-    // Get all reports
+    // Get all reports with raw text for jurisdiction extraction
     const reportsResult = await db.query(
-      `SELECT id, file_name, quarter_label, year, summary, detected_date
+      `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text
        FROM ifta_reports
        WHERE id = ANY($1::int[]) AND user_id = $2 AND status = 'completed'`,
       [reportIds, req.user.id]
@@ -244,7 +249,8 @@ router.post('/generate-summary', authenticate, async (req, res) => {
       quarter: r.quarter_label,
       year: r.year,
       summary: r.summary,
-      detectedDate: r.detected_date
+      detectedDate: r.detected_date,
+      rawText: r.raw_text // Include raw text for jurisdiction extraction
     }));
 
     // Sort chronologically
@@ -322,6 +328,145 @@ router.get('/generated/:id', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get generated report error:', error);
     res.status(500).json({ error: 'Failed to fetch report' });
+  }
+});
+
+// Download report as Excel (matching template)
+router.get('/generated/:id/excel', authenticate, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT gr.id, gr.report_name, gr.report_data, u.company_name, u.logo_url, 
+              u.brand_color_primary, u.brand_color_secondary
+       FROM generated_reports gr
+       JOIN users u ON u.id = gr.user_id
+       WHERE gr.id = $1 AND gr.user_id = $2`,
+      [req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    const report = result.rows[0];
+    const reportData = typeof report.report_data === 'string' 
+      ? JSON.parse(report.report_data) 
+      : report.report_data;
+
+    // Generate Excel matching template
+    const templatePath = path.join(process.cwd(), 'IFTA SUMMARY.xlsx');
+    const workbook = generateTemplateExcel(reportData, templatePath);
+
+    // Generate filename
+    const filename = `${report.report_name.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.xlsx`;
+
+    // Set headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Send file
+    const XLSX = require('xlsx');
+    XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }).then(buffer => {
+      res.send(buffer);
+    });
+  } catch (error) {
+    console.error('Download Excel error:', error);
+    res.status(500).json({ error: 'Failed to generate Excel file' });
+  }
+});
+
+// Download report as PDF
+router.get('/generated/:id/pdf', authenticate, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT gr.id, gr.report_name, gr.report_data, u.company_name, u.logo_url, 
+              u.brand_color_primary, u.brand_color_secondary
+       FROM generated_reports gr
+       JOIN users u ON u.id = gr.user_id
+       WHERE gr.id = $1 AND gr.user_id = $2`,
+      [req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    const report = result.rows[0];
+    const reportData = typeof report.report_data === 'string' 
+      ? JSON.parse(report.report_data) 
+      : report.report_data;
+
+    // Generate PDF using pdfkit
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ 
+      margin: 50,
+      size: 'LETTER'
+    });
+    
+    const filename = `${report.report_name.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    doc.pipe(res);
+
+    // Title and header
+    doc.fontSize(20).font('Helvetica-Bold').text(report.report_name, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica').text(`Company: ${report.company_name}`, { align: 'center' });
+    doc.fontSize(10).text(`Generated: ${new Date(report.created_at).toLocaleDateString()}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Jurisdiction table
+    if (reportData.jurisdictionData && reportData.jurisdictionData.jurisdictions) {
+      doc.fontSize(14).font('Helvetica-Bold').text('Jurisdiction Summary', { underline: true });
+      doc.moveDown(0.5);
+
+      // Table headers
+      doc.fontSize(9).font('Helvetica-Bold');
+      let startY = doc.y;
+      doc.text('Jurisdiction', 50, startY);
+      doc.text('Q1', 150, startY);
+      doc.text('Q2', 200, startY);
+      doc.text('Q3', 250, startY);
+      doc.text('Q4', 300, startY);
+      doc.text('Total KM', 350, startY);
+      doc.text('%', 450, startY);
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
+      doc.moveDown(0.3);
+
+      // Table rows
+      doc.font('Helvetica').fontSize(9);
+      reportData.jurisdictionData.jurisdictions.forEach((juris, index) => {
+        if (doc.y > 700) { // New page if needed
+          doc.addPage();
+          startY = doc.y;
+        }
+        
+        const y = doc.y;
+        doc.text(juris.code, 50, y);
+        juris.quarters.forEach((q, idx) => {
+          const x = 150 + (idx * 50);
+          doc.text(q ? q.km.toLocaleString() : '-', x, y, { width: 45, align: 'right' });
+        });
+        doc.text(juris.totalKM.toLocaleString(), 350, y, { width: 90, align: 'right' });
+        doc.text(`${juris.percentage.toFixed(2)}%`, 450, y, { width: 50, align: 'right' });
+        doc.moveDown(0.4);
+      });
+
+      // Grand total row
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
+      doc.moveDown(0.3);
+      doc.font('Helvetica-Bold');
+      doc.text('Grand Total', 50, doc.y);
+      doc.text(reportData.jurisdictionData.grandTotal.toLocaleString(), 350, doc.y, { width: 90, align: 'right' });
+      doc.text('100.00%', 450, doc.y, { width: 50, align: 'right' });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error('Download PDF error:', error);
+    res.status(500).json({ error: 'Failed to generate PDF file' });
   }
 });
 

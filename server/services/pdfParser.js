@@ -1,16 +1,20 @@
-const pdf = require('pdf-parse');
+const pdfParseModule = require('pdf-parse');
 const fs = require('fs');
 
 const parsePDF = async (filePath) => {
   try {
     const dataBuffer = fs.readFileSync(filePath);
-    const data = await pdf(dataBuffer);
+    // Use the new pdf-parse API
+    const PDFParse = pdfParseModule.PDFParse;
+    const parser = new PDFParse({ data: dataBuffer });
+    await parser;
+    const textResult = await parser.getText();
     
     return {
-      text: data.text,
-      numPages: data.npages,
-      info: data.info,
-      metadata: data.metadata
+      text: textResult.text,
+      numPages: textResult.total || 0,
+      info: {},
+      metadata: {}
     };
   } catch (error) {
     console.error('PDF parsing error:', error);
