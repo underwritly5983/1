@@ -12,6 +12,11 @@ const GeneratedReports = () => {
 
   useEffect(() => {
     fetchReports()
+    // Refresh every 5 seconds to catch newly generated reports
+    const interval = setInterval(() => {
+      fetchReports()
+    }, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   const fetchReports = async () => {

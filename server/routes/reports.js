@@ -165,10 +165,12 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
 
     // If auto-generate is enabled and we have reports, generate summary PDF
     let summaryPdfUrl = null;
+    let generatedReportId = null;
+    
     if (autoGenerate && reportIds.length > 0) {
       try {
-        // Wait a bit for processing to start
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait a bit for PDFs to be parsed and stored
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // Get user branding
         const userResult = await db.query(
@@ -177,65 +179,80 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
         );
         const user = userResult.rows[0];
 
-        // Get reports with raw text - wait for summaries to be ready
-        // Poll for up to 30 seconds for summaries to be completed
-        let reportsResult;
+        // Get reports with raw text - we'll use raw text even if summaries aren't ready
+        let reportsResult = await db.query(
+          `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+           FROM ifta_reports
+           WHERE id = ANY($1::int[]) AND user_id = $2`,
+          [reportIds, req.user.id]
+        );
+        
+        // Poll for summaries, but proceed with raw text if available
         let attempts = 0;
-        const maxAttempts = 15;
+        const maxAttempts = 10;
         
         while (attempts < maxAttempts) {
-          reportsResult = await db.query(
-            `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
-             FROM ifta_reports
-             WHERE id = ANY($1::int[]) AND user_id = $2`,
-            [reportIds, req.user.id]
-          );
-          
-          // Check if all reports have summaries (status = 'completed')
+          const hasRawText = reportsResult.rows.some(r => r.raw_text && r.raw_text.length > 100);
           const allCompleted = reportsResult.rows.every(r => r.status === 'completed' && r.summary);
-          if (allCompleted || attempts >= maxAttempts - 1) {
+          
+          if (hasRawText || allCompleted || attempts >= maxAttempts - 1) {
             break;
           }
           
           // Wait 2 seconds before next attempt
           await new Promise(resolve => setTimeout(resolve, 2000));
           attempts++;
+          
+          // Re-fetch reports
+          reportsResult = await db.query(
+            `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+             FROM ifta_reports
+             WHERE id = ANY($1::int[]) AND user_id = $2`,
+            [reportIds, req.user.id]
+          );
         }
 
         if (reportsResult.rows.length > 0) {
           // Use reports even if summaries aren't ready - we have raw text for jurisdiction extraction
           // Filter to reports that have at least raw text
-          const reportsWithData = reportsResult.rows.filter(r => r.raw_text && r.raw_text.length > 0);
+          const reportsWithData = reportsResult.rows.filter(r => r.raw_text && r.raw_text.length > 100);
           
           if (reportsWithData.length === 0) {
-            console.warn('No reports with data yet, will generate report later');
-            // Still create a basic report entry so user knows upload worked
-            const basicReportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
-            const basicReportData = {
+            console.warn('No reports with raw text yet, creating placeholder report');
+            // Create a placeholder report that will be updated when data is ready
+            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
+            const placeholderData = {
               companyName: user.company_name,
+              generatedAt: new Date().toISOString(),
               quarters: reportsResult.rows.map(r => ({
                 quarter: r.quarter_label,
                 year: r.year,
                 fileName: r.file_name,
-                status: r.status
+                status: r.status,
+                summary: 'Processing...'
               })),
               totals: { totalMiles: 0 },
-              jurisdictionData: { jurisdictions: [], grandTotal: 0, canVsUs: { can: { total: 0 }, us: { total: 0 } } }
+              jurisdictionData: { 
+                jurisdictions: [], 
+                grandTotal: 0, 
+                canVsUs: { 
+                  can: { total: 0, percentage: 0 }, 
+                  us: { total: 0, percentage: 0 },
+                  grandTotal: 0
+                } 
+              },
+              processing: true
             };
             
-            const basicSaveResult = await db.query(
+            const placeholderResult = await db.query(
               `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
                VALUES ($1, $2, $3, $4)
                RETURNING id`,
-              [req.user.id, basicReportName, JSON.stringify(basicReportData), 'auto-generated-pending']
+              [req.user.id, reportName, JSON.stringify(placeholderData), 'auto-generated-pending']
             );
             
-            return res.json({
-              message: `${req.files.length} file(s) uploaded successfully`,
-              results,
-              generatedReportId: basicSaveResult.rows[0].id,
-              note: 'Reports are processing. Summary will update when complete.'
-            });
+            generatedReportId = placeholderResult.rows[0].id;
+            console.log('Created placeholder report:', generatedReportId);
           } else {
             const reports = reportsWithData.map(r => ({
               id: r.id,
@@ -311,26 +328,51 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
             }
 
             summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
-            
-            // Return the generated report ID so frontend can navigate to it
-            return res.json({
-              message: `${req.files.length} file(s) uploaded successfully`,
-              results,
-              summaryPdfUrl,
-              generatedReportId: saveResult.rows[0].id
-            });
+            generatedReportId = saveResult.rows[0].id;
+            console.log('Created/updated report with data:', generatedReportId);
           }
         }
       } catch (error) {
         console.error('Error generating summary PDF:', error);
-        // Don't fail the upload if PDF generation fails
+        console.error('Error stack:', error.stack);
+        // Still create a basic report entry even if generation fails
+        if (!generatedReportId) {
+          try {
+            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
+            const userResult = await db.query(
+              'SELECT company_name FROM users WHERE id = $1',
+              [req.user.id]
+            );
+            const user = userResult.rows[0];
+            
+            const errorReportData = {
+              companyName: user.company_name,
+              generatedAt: new Date().toISOString(),
+              quarters: [],
+              totals: { totalMiles: 0 },
+              jurisdictionData: { jurisdictions: [], grandTotal: 0 },
+              error: 'Report generation encountered an error. Please try generating manually.'
+            };
+            
+            const errorSaveResult = await db.query(
+              `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
+               VALUES ($1, $2, $3, $4)
+               RETURNING id`,
+              [req.user.id, reportName, JSON.stringify(errorReportData), 'auto-generated-error']
+            );
+            generatedReportId = errorSaveResult.rows[0].id;
+          } catch (createError) {
+            console.error('Failed to create error report:', createError);
+          }
+        }
       }
     }
 
     res.json({
       message: `${req.files.length} file(s) uploaded successfully`,
       results,
-      summaryPdfUrl
+      summaryPdfUrl,
+      generatedReportId
     });
   } catch (error) {
     console.error('Upload error:', error);

@@ -80,6 +80,11 @@ const UploadReport = () => {
           navigate('/reports/generated')
         }, 2000)
       }
+      
+      // Refresh the page after redirect to show new reports
+      setTimeout(() => {
+        window.location.reload()
+      }, 3000)
     } catch (error) {
       console.error('Upload error:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Upload failed';
