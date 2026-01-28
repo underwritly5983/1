@@ -34,15 +34,22 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate limiting - more lenient for auth endpoints
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20 // limit auth endpoints to 20 requests per windowMs
+  max: 50, // limit auth endpoints to 50 requests per windowMs (more lenient)
+  message: 'Too many login attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful logins
 });
 
-// Apply rate limiting
+// Apply rate limiting - auth routes first, then general
 app.use('/api/auth/', authLimiter);
 app.use('/api/', generalLimiter);
 
