@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { FileText, Download, Trash2, Eye } from 'lucide-react'
@@ -77,29 +78,40 @@ const GeneratedReports = () => {
                 {reports.map((report) => (
                   <div
                     key={report.id}
-                    onClick={() => handleView(report.id)}
-                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                    className={`p-4 rounded-lg transition-colors ${
                       selectedReport?.id === report.id
                         ? 'bg-primary-50 border-2 border-primary-500'
                         : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
                     }`}
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleView(report.id)}
+                      >
                         <p className="font-medium text-gray-900">{report.report_name}</p>
                         <p className="text-sm text-gray-500 mt-1">
                           {format(new Date(report.created_at), 'MMM d, yyyy')}
                         </p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDelete(report.id)
-                        }}
-                        className="text-red-600 hover:text-red-700 ml-2"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <Link
+                          to={`/reports/jurisdiction/${report.id}`}
+                          className="text-primary-600 hover:text-primary-700"
+                          title="View Jurisdiction Report"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Link>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(report.id)
+                          }}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -118,10 +130,15 @@ const GeneratedReports = () => {
                     Generated on {format(new Date(selectedReport.created_at), 'MMMM d, yyyy')}
                   </p>
                 </div>
-                <button className="btn-secondary inline-flex items-center">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </button>
+                <div className="flex items-center space-x-3">
+                  <Link
+                    to={`/reports/jurisdiction/${selectedReport.id}`}
+                    className="btn-primary inline-flex items-center"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Jurisdiction Report
+                  </Link>
+                </div>
               </div>
 
               {selectedReport.report_data && (

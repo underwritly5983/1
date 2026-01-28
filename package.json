@@ -10,10 +10,19 @@
     "build": "cd client && npm run build",
     "install-all": "npm install && cd server && npm install && cd ../client && npm install"
   },
-  "keywords": ["ifta", "insurance", "broker", "reports"],
+  "keywords": [
+    "ifta",
+    "insurance",
+    "broker",
+    "reports"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
   }
 }

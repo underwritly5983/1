@@ -12,6 +12,7 @@ import Reports from './pages/Reports'
 import UploadReport from './pages/UploadReport'
 import GeneratedReports from './pages/GeneratedReports'
 import GenerateReport from './pages/GenerateReport'
+import JurisdictionReport from './pages/JurisdictionReport'
 import Profile from './pages/Profile'
 import Pricing from './pages/Pricing'
 import AdminDashboard from './pages/AdminDashboard'
@@ -34,6 +35,7 @@ function App() {
               <Route path="/reports/upload" element={<UploadReport />} />
               <Route path="/reports/generate" element={<GenerateReport />} />
               <Route path="/reports/generated" element={<GeneratedReports />} />
+              <Route path="/reports/jurisdiction/:id" element={<JurisdictionReport />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin" element={<AdminDashboard />} />
             </Route>

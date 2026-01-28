@@ -1,20 +1,19 @@
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
 
 // Generate summary PDF with all quarters
 const generateSummaryPDF = async (reportData, user) => {
   return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ 
-        margin: 50,
-        size: 'LETTER'
-      });
+    const doc = new PDFDocument({ 
+      margin: 50,
+      size: 'LETTER'
+    });
 
-      const chunks = [];
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    try {
 
       // Header with company name (logo can be added later if needed)
 
