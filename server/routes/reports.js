@@ -241,20 +241,45 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
             const pdfPath = path.join(summariesDir, pdfFilename);
             fs.writeFileSync(pdfPath, pdfBuffer);
 
-            // Save generated report to database
+            // Check if a report for today already exists, update it instead of creating new
             const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
-            const saveResult = await db.query(
-              `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id`,
-              [
-                req.user.id,
-                reportName,
-                JSON.stringify(reportData),
-                pdfPath,
-                'auto-generated'
-              ]
+            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            
+            // Check for existing report from today
+            const existingReport = await db.query(
+              `SELECT id FROM generated_reports 
+               WHERE user_id = $1 AND report_name = $2 
+               ORDER BY created_at DESC LIMIT 1`,
+              [req.user.id, reportName]
             );
+            
+            let saveResult;
+            if (existingReport.rows.length > 0) {
+              // Update existing report
+              await db.query(
+                `UPDATE generated_reports 
+                 SET report_data = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $3`,
+                [JSON.stringify(reportData), pdfPath, existingReport.rows[0].id]
+              );
+              saveResult = { rows: [{ id: existingReport.rows[0].id }] };
+              console.log('Updated existing report:', existingReport.rows[0].id);
+            } else {
+              // Create new report
+              saveResult = await db.query(
+                `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
+                 VALUES ($1, $2, $3, $4, $5)
+                 RETURNING id`,
+                [
+                  req.user.id,
+                  reportName,
+                  JSON.stringify(reportData),
+                  pdfPath,
+                  'auto-generated'
+                ]
+              );
+              console.log('Created new report:', saveResult.rows[0].id);
+            }
 
             summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
             
@@ -513,13 +538,40 @@ router.post('/generate-summary', authenticate, async (req, res) => {
     // Generate report
     const reportData = await generateReport(reports, user);
 
-    // Save generated report
-    const saveResult = await db.query(
-      `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, created_at`,
-      [req.user.id, reportName || 'IFTA Summary Report', JSON.stringify(reportData), 'default']
+    // Check if report with same name exists, update instead of creating new
+    const finalReportName = reportName || 'IFTA Summary Report';
+    const existingReport = await db.query(
+      `SELECT id FROM generated_reports 
+       WHERE user_id = $1 AND report_name = $2 
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id, finalReportName]
     );
+    
+    let saveResult;
+    if (existingReport.rows.length > 0) {
+      // Update existing report
+      await db.query(
+        `UPDATE generated_reports 
+         SET report_data = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [JSON.stringify(reportData), existingReport.rows[0].id]
+      );
+      const updated = await db.query(
+        `SELECT id, created_at FROM generated_reports WHERE id = $1`,
+        [existingReport.rows[0].id]
+      );
+      saveResult = updated;
+      console.log('Updated existing report:', existingReport.rows[0].id);
+    } else {
+      // Create new report
+      saveResult = await db.query(
+        `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, created_at`,
+        [req.user.id, finalReportName, JSON.stringify(reportData), 'default']
+      );
+      console.log('Created new report:', saveResult.rows[0].id);
+    }
 
     // Track analytics
     await db.query(

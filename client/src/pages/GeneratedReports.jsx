@@ -39,11 +39,12 @@ const GeneratedReports = () => {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, e) => {
+    e?.stopPropagation() // Prevent triggering the view action
     if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return
 
     try {
-      await axios.delete(`/reports/generated/${id}`)
+      const response = await axios.delete(`/reports/generated/${id}`)
       toast.success('Report deleted successfully')
       fetchReports()
       if (selectedReport?.id === id) {
@@ -51,7 +52,8 @@ const GeneratedReports = () => {
       }
     } catch (error) {
       console.error('Delete error:', error)
-      const errorMessage = error.response?.data?.error || 'Failed to delete report'
+      console.error('Error response:', error.response)
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to delete report'
       toast.error(errorMessage)
     }
   }
@@ -110,11 +112,9 @@ const GeneratedReports = () => {
                           <FileText className="h-4 w-4" />
                         </Link>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(report.id)
-                          }}
+                          onClick={(e) => handleDelete(report.id, e)}
                           className="text-red-600 hover:text-red-700"
+                          title="Delete report"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -161,7 +161,14 @@ const GeneratedReports = () => {
                   {/* Totals */}
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-3">Totals</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="bg-primary-50 rounded-lg p-4">
+                        <p className="text-sm text-gray-600">Total KM</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">
+                          {selectedReport.report_data.jurisdictionData?.grandTotal?.toLocaleString() || 
+                           selectedReport.report_data.totals?.totalMiles?.toLocaleString() || 'N/A'}
+                        </p>
+                      </div>
                       <div className="bg-primary-50 rounded-lg p-4">
                         <p className="text-sm text-gray-600">Total Miles</p>
                         <p className="text-2xl font-bold text-gray-900 mt-1">
