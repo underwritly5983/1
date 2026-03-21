@@ -3,6 +3,7 @@
   "private": true,
   "description": "Underwritly marketing landing page",
   "scripts": {
-    "start": "npx --yes serve -l 3456 ."
+    "start": "npx --yes serve -l 3456 .",
+    "deploy": "vercel --prod"
   }
 }
