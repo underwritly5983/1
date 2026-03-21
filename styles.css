@@ -483,6 +483,10 @@ a:hover {
   color: #b91c1c;
 }
 
+.form-submit-error {
+  margin-bottom: 0.75rem;
+}
+
 .form-success {
   background: var(--green-soft);
   border: 1px solid rgba(5, 150, 105, 0.35);

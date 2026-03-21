@@ -2,6 +2,7 @@
   var form = document.getElementById("early-access-form");
   var success = document.getElementById("form-success");
   var submitBtn = document.getElementById("submit-btn");
+  var formError = document.getElementById("form-error");
   var yearEl = document.getElementById("year");
 
   if (yearEl) {
@@ -13,6 +14,10 @@
       var el = document.getElementById(id + "-error");
       if (el) el.textContent = "";
     });
+    if (formError) {
+      formError.textContent = "";
+      formError.classList.add("hidden");
+    }
   }
 
   function showError(fieldId, message) {
@@ -84,20 +89,56 @@
     if (!validate()) return;
 
     var payload = getPayload();
-    console.log("[Underwritly early access]", payload);
 
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting…";
     }
 
-    window.setTimeout(function () {
-      form.classList.add("hidden");
-      if (success) success.classList.remove("hidden");
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Submit request";
-      }
-    }, 400);
+    fetch("/api/early-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var data = {};
+          if (text) {
+            try {
+              data = JSON.parse(text);
+            } catch (ignore) {
+              /* non-JSON error page */
+            }
+          }
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.ok) {
+          form.classList.add("hidden");
+          if (success) success.classList.remove("hidden");
+          return;
+        }
+        var msg =
+          (result.data && result.data.error) ||
+          "Something went wrong. Please try again or email info@underwritly.com.";
+        if (formError) {
+          formError.textContent = msg;
+          formError.classList.remove("hidden");
+        }
+      })
+      .catch(function () {
+        if (formError) {
+          formError.textContent =
+            "We could not reach the server. Check your connection or email info@underwritly.com.";
+          formError.classList.remove("hidden");
+        }
+      })
+      .finally(function () {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit request";
+        }
+      });
   });
 })();
