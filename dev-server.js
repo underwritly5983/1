@@ -14,6 +14,13 @@ var earlyAccessHandler = require("./api/early-access");
 var app = express();
 var PORT = parseInt(process.env.PORT || "3456", 10);
 
+var pass = (process.env.SMTP_PASS || "").trim();
+if (!pass || /your-google-app-password|changeme/i.test(pass)) {
+  console.warn(
+    "[dev-server] SMTP_PASS missing or still a placeholder — edit .env with your Gmail App Password to send mail."
+  );
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 app.all("/api/early-access", function (req, res) {
