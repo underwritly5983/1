@@ -10,6 +10,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 var express = require("express");
 var earlyAccessHandler = require("./api/early-access");
+var profileRegistrationHandler = require("./api/profile-registration");
 
 var app = express();
 var PORT = parseInt(process.env.PORT || "3456", 10);
@@ -34,6 +35,15 @@ function mountEarlyAccess(req, res) {
 
 app.all(["/api/early-access", "/api/early-access/"], mountEarlyAccess);
 
+function mountProfileRegistration(req, res) {
+  return profileRegistrationHandler(req, res);
+}
+
+app.all(
+  ["/api/profile-registration", "/api/profile-registration/"],
+  mountProfileRegistration
+);
+
 app.use(
   express.static(path.join(__dirname), {
     index: ["index.html"],
@@ -57,7 +67,7 @@ var server = app.listen(PORT, function () {
   console.log("");
   console.log("============================================================");
   console.log("  Underwritly local server  http://localhost:" + PORT);
-  console.log("  Form API: POST /api/early-access (same as Vercel)");
+  console.log("  APIs: POST /api/early-access, POST /api/profile-registration (same as Vercel)");
   console.log("  If you see 404 on /api/*, you are NOT running this server —");
   console.log("  use: npm start   (not: npm run start:static / plain serve)");
   console.log("============================================================");

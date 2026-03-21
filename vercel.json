@@ -3,6 +3,9 @@
   "functions": {
     "api/early-access.js": {
       "maxDuration": 10
+    },
+    "api/profile-registration.js": {
+      "maxDuration": 10
     }
   },
   "headers": [

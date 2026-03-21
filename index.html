@@ -36,6 +36,7 @@
         </a>
         <nav class="nav" aria-label="Primary">
           <a href="#features">Capabilities</a>
+          <a href="#profile-registration">Register profile</a>
           <a href="#early-access" class="nav-cta">Request access</a>
         </nav>
       </div>
@@ -216,6 +217,111 @@
           </div>
         </div>
       </section>
+
+      <section id="profile-registration" class="profile-registration">
+        <div class="container narrow">
+          <header class="section-head section-head--center">
+            <h2 class="section-title">Register your profile</h2>
+            <p class="section-sub">
+              Create a broker profile so we can match you with the right onboarding path. You will
+              receive an email confirmation after you submit.
+            </p>
+          </header>
+
+          <form class="access-form" id="profile-registration-form" novalidate>
+            <div class="form-row">
+              <label for="profile-name">Full name</label>
+              <input
+                type="text"
+                id="profile-name"
+                name="name"
+                autocomplete="name"
+                required
+                placeholder="Jordan Lee"
+              />
+              <p class="field-error" id="profile-name-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="profile-email">Work email</label>
+              <input
+                type="email"
+                id="profile-email"
+                name="email"
+                autocomplete="email"
+                required
+                placeholder="name@firm.com"
+              />
+              <p class="field-error" id="profile-email-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="profile-company">Company</label>
+              <input
+                type="text"
+                id="profile-company"
+                name="company"
+                autocomplete="organization"
+                required
+                placeholder="Brokerage or agency name"
+              />
+              <p class="field-error" id="profile-company-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="profile-role">Job title</label>
+              <input
+                type="text"
+                id="profile-role"
+                name="role"
+                autocomplete="organization-title"
+                required
+                placeholder="Underwriter, producer, etc."
+              />
+              <p class="field-error" id="profile-role-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="profile-phone">Phone</label>
+              <input
+                type="tel"
+                id="profile-phone"
+                name="phone"
+                autocomplete="tel"
+                required
+                placeholder="+1 (555) 000-0000"
+              />
+              <p class="field-error" id="profile-phone-error" role="alert"></p>
+            </div>
+
+            <div class="form-row form-row--checkbox">
+              <label class="checkbox-label">
+                <input type="checkbox" id="profile-confirm" name="confirm" required />
+                <span>I confirm the information above is accurate.</span>
+              </label>
+              <p class="field-error" id="profile-confirm-error" role="alert"></p>
+            </div>
+
+            <p class="field-error form-submit-error hidden" id="profile-form-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="profile-submit-btn">
+              Register profile
+            </button>
+          </form>
+
+          <div
+            class="form-success hidden"
+            id="profile-form-success"
+            role="status"
+            aria-live="polite"
+          >
+            <p class="success-title">Profile registered</p>
+            <p class="success-body">
+              Thank you. We have recorded your profile and sent a confirmation to your work email.
+              If anything needs updating, reply to that message or contact info@underwritly.com.
+            </p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -223,6 +329,8 @@
         <p>© <span id="year"></span> Underwritly. All rights reserved.</p>
       </div>
     </footer>
+
+    <div id="page-toast" class="page-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <script src="script.js"></script>
   </body>
