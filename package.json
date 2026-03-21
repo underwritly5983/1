@@ -7,6 +7,11 @@
   },
   "scripts": {
     "start": "npx --yes serve -l 3456 .",
+    "dev": "node dev-server.js",
     "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
   }
 }

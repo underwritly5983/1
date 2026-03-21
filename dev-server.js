@@ -1,0 +1,33 @@
+/**
+ * Local development server: static files + /api/early-access (same handler as Vercel).
+ * Plain `serve` cannot run serverless functions — use `npm run dev` when testing the form.
+ *
+ * Create a `.env` file (gitignored) with SMTP_USER, SMTP_PASS, MAIL_FROM, etc., or export vars in your shell.
+ */
+
+var path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
+var express = require("express");
+var earlyAccessHandler = require("./api/early-access");
+
+var app = express();
+var PORT = parseInt(process.env.PORT || "3456", 10);
+
+app.use(express.json({ limit: "1mb" }));
+
+app.all("/api/early-access", function (req, res) {
+  return earlyAccessHandler(req, res);
+});
+
+app.use(
+  express.static(path.join(__dirname), {
+    index: ["index.html"],
+    dotfiles: "ignore",
+  })
+);
+
+app.listen(PORT, function () {
+  console.log("Local dev (static + API): http://localhost:" + PORT);
+  console.log("Set SMTP_* and MAIL_FROM in .env or the environment to test email.");
+});
