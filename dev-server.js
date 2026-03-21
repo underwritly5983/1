@@ -23,16 +23,35 @@ if (!pass || /your-google-app-password|changeme/i.test(pass)) {
 
 app.use(express.json({ limit: "1mb" }));
 
-app.all("/api/early-access", function (req, res) {
-  return earlyAccessHandler(req, res);
+app.use(function (req, res, next) {
+  console.log("[dev-server]", req.method, req.originalUrl || req.url);
+  next();
 });
+
+function mountEarlyAccess(req, res) {
+  return earlyAccessHandler(req, res);
+}
+
+app.all(["/api/early-access", "/api/early-access/"], mountEarlyAccess);
 
 app.use(
   express.static(path.join(__dirname), {
     index: ["index.html"],
     dotfiles: "ignore",
+    fallthrough: true,
   })
 );
+
+app.use(function (req, res) {
+  if (req.path.indexOf("/api") === 0) {
+    res.status(404).json({
+      error: "API not found",
+      hint: "Use the Node dev server (npm start or dev.cmd), not plain serve or Live Server.",
+    });
+    return;
+  }
+  res.status(404).send("Not found");
+});
 
 var server = app.listen(PORT, function () {
   console.log("");

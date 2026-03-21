@@ -82,6 +82,16 @@
     };
   }
 
+  var host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    fetch("/api/early-access", { method: "GET", cache: "no-store" }).then(function (r) {
+      if (r.status === 404) {
+        var warn = document.getElementById("api-env-warning");
+        if (warn) warn.classList.remove("hidden");
+      }
+    });
+  }
+
   if (!form) return;
 
   form.addEventListener("submit", function (e) {

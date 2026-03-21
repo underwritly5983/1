@@ -147,13 +147,25 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
       return res.status(204).end();
     }
 
+    if (req.method === "GET") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return sendJson(res, 200, { ok: true, endpoint: "early-access" });
+    }
+
+    if (req.method === "HEAD") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.statusCode = 200;
+      return res.end();
+    }
+
     if (req.method !== "POST") {
-      res.setHeader("Allow", "POST, OPTIONS");
+      res.setHeader("Allow", "GET, HEAD, POST, OPTIONS");
       return sendJson(res, 405, { error: "Method not allowed" });
     }
 
