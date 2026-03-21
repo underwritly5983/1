@@ -1,0 +1,8 @@
+{
+  "name": "underwritly-landing",
+  "private": true,
+  "description": "Underwritly marketing landing page",
+  "scripts": {
+    "start": "npx --yes serve -l 3456 ."
+  }
+}
