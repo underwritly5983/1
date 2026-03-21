@@ -27,7 +27,15 @@ app.use(
   })
 );
 
-app.listen(PORT, function () {
+var server = app.listen(PORT, function () {
   console.log("Local dev (static + API): http://localhost:" + PORT);
   console.log("Set SMTP_* and MAIL_FROM in .env or the environment to test email.");
+});
+
+server.on("error", function (err) {
+  if (err && err.code === "EADDRINUSE") {
+    console.error("Port " + PORT + " is already in use. Close the other server or run: set PORT=3457 && dev.cmd");
+    process.exit(1);
+  }
+  throw err;
 });
