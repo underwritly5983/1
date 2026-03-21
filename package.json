@@ -6,8 +6,9 @@
     "nodemailer": "^8.0.3"
   },
   "scripts": {
-    "start": "npx --yes serve -l 3456 .",
+    "start": "node dev-server.js",
     "dev": "node dev-server.js",
+    "start:static": "npx --yes serve -l 3456 .",
     "deploy": "vercel --prod"
   },
   "devDependencies": {

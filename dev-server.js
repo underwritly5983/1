@@ -35,8 +35,15 @@ app.use(
 );
 
 var server = app.listen(PORT, function () {
-  console.log("Local dev (static + API): http://localhost:" + PORT);
-  console.log("Set SMTP_* and MAIL_FROM in .env or the environment to test email.");
+  console.log("");
+  console.log("============================================================");
+  console.log("  Underwritly local server  http://localhost:" + PORT);
+  console.log("  Form API: POST /api/early-access (same as Vercel)");
+  console.log("  If you see 404 on /api/*, you are NOT running this server —");
+  console.log("  use: npm start   (not: npm run start:static / plain serve)");
+  console.log("============================================================");
+  console.log("");
+  console.log("Set SMTP_* and MAIL_FROM in .env to test email sending.");
 });
 
 server.on("error", function (err) {
