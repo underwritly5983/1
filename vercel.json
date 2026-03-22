@@ -6,6 +6,9 @@
     },
     "api/profile-registration.js": {
       "maxDuration": 10
+    },
+    "api/verify-profile-access.js": {
+      "maxDuration": 10
     }
   },
   "headers": [

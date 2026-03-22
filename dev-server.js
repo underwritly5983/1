@@ -1,8 +1,9 @@
 /**
- * Local development server: static files + /api/early-access (same handler as Vercel).
- * Plain `serve` cannot run serverless functions — use `npm run dev` when testing the form.
+ * Local dev: static files + Vercel-style API routes (early-access, verify-profile-access, profile-registration).
+ * Plain `serve` / Live Server cannot run these — use `npm start` from this folder.
  *
- * Create a `.env` file (gitignored) with SMTP_USER, SMTP_PASS, MAIL_FROM, etc., or export vars in your shell.
+ * Copy `.env.example` to `.env` and set SMTP_*, MAIL_FROM, PROFILE_ACCESS_SECRET (same value as on Vercel).
+ * Optional: SITE_URL=http://localhost:PORT for clickable absolute links in confirmation emails.
  */
 
 var path = require("path");
@@ -11,6 +12,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 var express = require("express");
 var earlyAccessHandler = require("./api/early-access");
 var profileRegistrationHandler = require("./api/profile-registration");
+var verifyProfileAccessHandler = require("./api/verify-profile-access");
 
 var app = express();
 var PORT = parseInt(process.env.PORT || "3456", 10);
@@ -19,6 +21,13 @@ var pass = (process.env.SMTP_PASS || "").trim();
 if (!pass || /your-google-app-password|changeme/i.test(pass)) {
   console.warn(
     "[dev-server] SMTP_PASS missing or still a placeholder — edit .env with your Gmail App Password to send mail."
+  );
+}
+
+var profileSecret = (process.env.PROFILE_ACCESS_SECRET || "").trim();
+if (!profileSecret) {
+  console.warn(
+    "[dev-server] PROFILE_ACCESS_SECRET is not set — early-access confirmation emails will not include a profile registration link. Copy the same secret you use on Vercel into .env."
   );
 }
 
@@ -44,6 +53,15 @@ app.all(
   mountProfileRegistration
 );
 
+function mountVerifyProfileAccess(req, res) {
+  return verifyProfileAccessHandler(req, res);
+}
+
+app.all(
+  ["/api/verify-profile-access", "/api/verify-profile-access/"],
+  mountVerifyProfileAccess
+);
+
 app.use(
   express.static(path.join(__dirname), {
     index: ["index.html"],
@@ -67,7 +85,9 @@ var server = app.listen(PORT, function () {
   console.log("");
   console.log("============================================================");
   console.log("  Underwritly local server  http://localhost:" + PORT);
-  console.log("  APIs: POST /api/early-access, POST /api/profile-registration (same as Vercel)");
+  console.log(
+    "  APIs: POST /api/early-access, GET /api/verify-profile-access, POST /api/profile-registration"
+  );
   console.log("  If you see 404 on /api/*, you are NOT running this server —");
   console.log("  use: npm start   (not: npm run start:static / plain serve)");
   console.log("============================================================");

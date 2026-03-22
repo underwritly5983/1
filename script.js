@@ -9,8 +9,12 @@
   var profileSuccess = document.getElementById("profile-form-success");
   var profileSubmitBtn = document.getElementById("profile-submit-btn");
   var profileFormError = document.getElementById("profile-form-error");
+  var profileSection = document.getElementById("profile-registration");
   var toastEl = document.getElementById("page-toast");
   var toastTimer = null;
+
+  var PROFILE_ACCESS_STORAGE = "underwritly_profile_access_v1";
+  var profileAccessTokenStored = null;
 
   if (yearEl) {
     yearEl.textContent = String(new Date().getFullYear());
@@ -101,6 +105,111 @@
     };
   }
 
+  function unlockProfileRegistration(token, emailFromToken) {
+    profileAccessTokenStored = token;
+    try {
+      sessionStorage.setItem(PROFILE_ACCESS_STORAGE, token);
+    } catch (ignore) {}
+    if (profileSection) {
+      profileSection.classList.remove("profile-gate--locked");
+      profileSection.setAttribute("aria-hidden", "false");
+    }
+    var emailInput = document.getElementById("profile-email");
+    if (emailInput && emailFromToken) {
+      emailInput.value = emailFromToken;
+      emailInput.readOnly = true;
+      emailInput.setAttribute("readonly", "readonly");
+    }
+  }
+
+  function readProfileAccessQueryToken() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      return params.get("profile_access") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function initProfileGate() {
+    if (!profileSection) return;
+
+    var qToken = readProfileAccessQueryToken();
+    var token = qToken;
+    if (!token) {
+      try {
+        token = sessionStorage.getItem(PROFILE_ACCESS_STORAGE) || "";
+      } catch (e) {
+        token = "";
+      }
+    }
+    if (!token) return;
+
+    var verifyUrl =
+      "/api/verify-profile-access?profile_access=" + encodeURIComponent(token);
+    fetch(verifyUrl, { method: "GET", cache: "no-store" })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var data = {};
+          if (text) {
+            try {
+              data = JSON.parse(text);
+            } catch (ignore) {
+              /* non-JSON */
+            }
+          }
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.ok === true && result.data.email) {
+          unlockProfileRegistration(token, result.data.email);
+          if (qToken) {
+            try {
+              var u = new URL(window.location.href);
+              u.searchParams.delete("profile_access");
+              window.history.replaceState({}, "", u.pathname + u.search + u.hash);
+            } catch (e) {
+              /* ignore */
+            }
+          }
+          if (window.location.hash === "#profile-registration") {
+            requestAnimationFrame(function () {
+              profileSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }
+          return;
+        }
+        try {
+          sessionStorage.removeItem(PROFILE_ACCESS_STORAGE);
+        } catch (e) {
+          /* ignore */
+        }
+        profileAccessTokenStored = null;
+        var errMsg =
+          (result.data && result.data.error) || "Registration link is invalid or expired.";
+        showToast(errMsg, "error");
+      })
+      .catch(function () {
+        try {
+          sessionStorage.removeItem(PROFILE_ACCESS_STORAGE);
+        } catch (e) {
+          /* ignore */
+        }
+        profileAccessTokenStored = null;
+        showToast("Could not verify your registration link. Try again later.", "error");
+      });
+  }
+
+  function getProfileAccessTokenForSubmit() {
+    if (profileAccessTokenStored) return profileAccessTokenStored;
+    try {
+      return sessionStorage.getItem(PROFILE_ACCESS_STORAGE) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
   function clearProfileErrors() {
     ["profile-name", "profile-email", "profile-company", "profile-role", "profile-phone", "profile-confirm"].forEach(
       function (id) {
@@ -180,6 +289,7 @@
       company: document.getElementById("profile-company").value.trim(),
       role: document.getElementById("profile-role").value.trim(),
       phone: document.getElementById("profile-phone").value.trim(),
+      profileAccessToken: getProfileAccessTokenForSubmit(),
       submittedAt: new Date().toISOString(),
     };
   }
@@ -257,6 +367,10 @@
   if (profileForm) {
     profileForm.addEventListener("submit", function (e) {
       e.preventDefault();
+      if (!getProfileAccessTokenForSubmit()) {
+        showToast("Open the private profile link from your early access confirmation email.", "error");
+        return;
+      }
       if (!validateProfile()) {
         showToast("Please fix the highlighted fields.", "error");
         return;
@@ -320,4 +434,6 @@
         });
     });
   }
+
+  initProfileGate();
 })();

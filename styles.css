@@ -433,6 +433,16 @@ a:hover {
   border-top: 1px solid var(--border);
 }
 
+.profile-gate--locked {
+  display: none !important;
+}
+
+.form-row input[readonly] {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: default;
+}
+
 .form-row--checkbox {
   margin-bottom: 1rem;
 }

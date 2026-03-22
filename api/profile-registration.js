@@ -1,9 +1,11 @@
 /**
  * Profile registration: internal notification + confirmation email to the registrant.
  * Env: same as early-access (SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_EMAIL).
+ * POST body must include profileAccessToken from the early-access confirmation email link.
  */
 
 var nodemailer = require("nodemailer");
+var tokenLib = require("./lib/profile-access-token");
 
 function escapeHtml(s) {
   return String(s)
@@ -179,6 +181,18 @@ module.exports = async function handler(req, res) {
     var validated = validatePayload(body);
     if (!validated.ok) {
       return sendJson(res, 400, { error: validated.error });
+    }
+
+    var accessTok =
+      typeof body.profileAccessToken === "string" ? body.profileAccessToken.trim() : "";
+    var verified = tokenLib.verifyProfileAccessToken(accessTok);
+    if (!verified.ok) {
+      return sendJson(res, 403, { error: verified.error });
+    }
+    if (verified.email !== validated.data.email.trim().toLowerCase()) {
+      return sendJson(res, 403, {
+        error: "Work email must match the address from your early access confirmation link.",
+      });
     }
 
     var d = validated.data;

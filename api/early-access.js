@@ -10,9 +10,13 @@
  *   SMTP_PASS — required (Google App Password, spaces optional)
  *   MAIL_FROM — required; should match SMTP_USER for Gmail (e.g. "Name <you@gmail.com>")
  *   NOTIFY_EMAIL — optional, defaults to info@underwritly.com
+ *   PROFILE_ACCESS_SECRET — required for the profile registration link in the confirmation email
+ *   SITE_URL or PUBLIC_SITE_URL — optional; otherwise VERCEL_URL is used for absolute links
+ *   PROFILE_ACCESS_TTL_SECONDS — optional, default 30 days
  */
 
 var nodemailer = require("nodemailer");
+var profileAccess = require("./lib/profile-access-token");
 
 var SOURCE_LABELS = {
   search: "Search engine",
@@ -248,6 +252,32 @@ module.exports = async function handler(req, res) {
       "</td></tr>" +
       "</table>";
 
+    var profileToken = profileAccess.signProfileAccessToken(d.email);
+    var profileLink = profileToken ? profileAccess.buildProfileRegistrationLink(profileToken) : "";
+    if (!profileAccess.hasSigningSecret()) {
+      console.warn("[early-access] PROFILE_ACCESS_SECRET is not set; confirmation email will not include a profile registration link.");
+    }
+
+    var registerBlurbText =
+      profileLink ?
+        "\n\nComplete your broker profile (private link for you):\n" +
+        profileLink +
+        "\n\nThis link only works for the email address you used above. Do not forward it.\n" :
+        "";
+
+    var registerBlurbHtml = "";
+    if (profileLink) {
+      registerBlurbHtml =
+        "<p><strong>Next step:</strong> complete your broker profile using the private link below. " +
+        "It only works for this email address—please do not forward it.</p>" +
+        "<p><a href=\"" +
+        escapeHtml(profileLink) +
+        "\">Register your profile</a></p>" +
+        "<p style=\"font-size:13px;color:#64748b;word-break:break-all;\">" +
+        escapeHtml(profileLink) +
+        "</p>";
+    }
+
     var confirmSubject = "We received your early access request — Underwritly";
     var confirmText =
       "Hi " +
@@ -257,8 +287,9 @@ module.exports = async function handler(req, res) {
       "our team will review it shortly.\n\n" +
       "We are excited about the opportunity to help your organization streamline underwriting " +
       "with structured intelligence for IFTA, driver verification, fleet data, and regulatory reporting. " +
-      "When onboarding opens for your profile, we will reach out at this email address with next steps.\n\n" +
-      "If you have questions in the meantime, you can reply to this message or contact us at info@underwritly.com.\n\n" +
+      "When onboarding opens for your profile, we will reach out at this email address with next steps." +
+      registerBlurbText +
+      "\nIf you have questions in the meantime, you can reply to this message or contact us at info@underwritly.com.\n\n" +
       "— The Underwritly team";
 
     var confirmHtml =
@@ -270,6 +301,7 @@ module.exports = async function handler(req, res) {
       "<p>We are excited about the opportunity to help your organization streamline underwriting " +
       "with structured intelligence for IFTA, driver verification, fleet data, and regulatory reporting. " +
       "When onboarding opens for your profile, we will reach out at this email address with next steps.</p>" +
+      registerBlurbHtml +
       "<p>If you have questions in the meantime, you can reply to this message or contact us at " +
       '<a href="mailto:info@underwritly.com">info@underwritly.com</a>.</p>' +
       "<p>— The Underwritly team</p>";
