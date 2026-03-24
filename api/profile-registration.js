@@ -6,10 +6,10 @@
  */
 
 var nodemailer = require("nodemailer");
-var tokenLib = require("./lib/profile-access-token");
-var completionLib = require("./lib/completion-token");
-var userStore = require("./lib/user-store");
-var submissionsDb = require("./lib/submissions-db");
+var tokenLib = require("../lib/profile-access-token");
+var completionLib = require("../lib/completion-token");
+var userStore = require("../lib/user-store");
+var submissionsDb = require("../lib/submissions-db");
 
 function escapeHtml(s) {
   return String(s)

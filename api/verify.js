@@ -5,8 +5,8 @@
  */
 
 var querystring = require("querystring");
-var tokenLib = require("./lib/profile-access-token");
-var completionLib = require("./lib/completion-token");
+var tokenLib = require("../lib/profile-access-token");
+var completionLib = require("../lib/completion-token");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;

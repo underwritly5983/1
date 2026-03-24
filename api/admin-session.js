@@ -2,7 +2,7 @@
  * GET — verify admin session cookie.
  */
 
-var adminSession = require("./lib/admin-session-token");
+var adminSession = require("../lib/admin-session-token");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;

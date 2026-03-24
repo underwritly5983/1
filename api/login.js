@@ -2,9 +2,9 @@
  * POST { email, password } — sets session cookie.
  */
 
-var passwordLib = require("./lib/password");
-var sessionLib = require("./lib/session-token");
-var userStore = require("./lib/user-store");
+var passwordLib = require("../lib/password");
+var sessionLib = require("../lib/session-token");
+var userStore = require("../lib/user-store");
 
 function sendJson(res, status, obj, extraHeaders) {
   if (extraHeaders && typeof extraHeaders === "object") {

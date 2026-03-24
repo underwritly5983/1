@@ -2,7 +2,7 @@
  * POST — clear admin session cookie.
  */
 
-var adminSession = require("./lib/admin-session-token");
+var adminSession = require("../lib/admin-session-token");
 
 function sendJson(res, status, obj, extraHeaders) {
   if (extraHeaders && typeof extraHeaders === "object") {

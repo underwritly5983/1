@@ -2,11 +2,11 @@
  * POST { completionToken, password, logoBase64?, logoMime? } — creates account, sets session cookie, redirects client to dashboard.
  */
 
-var completionLib = require("./lib/completion-token");
-var passwordLib = require("./lib/password");
-var sessionLib = require("./lib/session-token");
-var userStore = require("./lib/user-store");
-var submissionsDb = require("./lib/submissions-db");
+var completionLib = require("../lib/completion-token");
+var passwordLib = require("../lib/password");
+var sessionLib = require("../lib/session-token");
+var userStore = require("../lib/user-store");
+var submissionsDb = require("../lib/submissions-db");
 
 var LOGO_MAX_BYTES = 256 * 1024;
 var ALLOWED_MIME = { "image/png": true, "image/jpeg": true, "image/webp": true };

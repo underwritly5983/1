@@ -2,7 +2,7 @@
  * POST — clears session cookie.
  */
 
-var sessionLib = require("./lib/session-token");
+var sessionLib = require("../lib/session-token");
 
 function sendJson(res, status, obj, extraHeaders) {
   if (extraHeaders && typeof extraHeaders === "object") {

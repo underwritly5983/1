@@ -16,8 +16,8 @@
  */
 
 var nodemailer = require("nodemailer");
-var profileAccess = require("./lib/profile-access-token");
-var submissionsDb = require("./lib/submissions-db");
+var profileAccess = require("../lib/profile-access-token");
+var submissionsDb = require("../lib/submissions-db");
 
 var SOURCE_LABELS = {
   search: "Search engine",

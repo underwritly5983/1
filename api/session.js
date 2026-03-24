@@ -2,8 +2,8 @@
  * GET — current user (from HttpOnly cookie), no secrets.
  */
 
-var sessionLib = require("./lib/session-token");
-var userStore = require("./lib/user-store");
+var sessionLib = require("../lib/session-token");
+var userStore = require("../lib/user-store");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;

@@ -2,8 +2,8 @@
  * GET — list all submissions (admin cookie required).
  */
 
-var adminSession = require("./lib/admin-session-token");
-var submissionsDb = require("./lib/submissions-db");
+var adminSession = require("../lib/admin-session-token");
+var submissionsDb = require("../lib/submissions-db");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;
