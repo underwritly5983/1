@@ -1,5 +1,5 @@
 /**
- * Local dev: static files + Vercel-style API routes (early-access, verify-profile-access, profile-registration).
+ * Local dev: static files + Vercel-style API routes (early-access, verify, profile-registration).
  * Plain `serve` / Live Server cannot run these — use `npm start` from this folder.
  *
  * Copy `.env.example` to `.env` and set SMTP_*, MAIL_FROM, PROFILE_ACCESS_SECRET (same value as on Vercel).
@@ -13,8 +13,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 var express = require("express");
 var earlyAccessHandler = require("./api/early-access");
 var profileRegistrationHandler = require("./api/profile-registration");
-var verifyProfileAccessHandler = require("./api/verify-profile-access");
-var verifyCompletionTokenHandler = require("./api/verify-completion-token");
+var verifyHandler = require("./api/verify");
 var completeRegistrationHandler = require("./api/complete-registration");
 var sessionHandler = require("./api/session");
 var loginHandler = require("./api/login");
@@ -72,21 +71,9 @@ app.all(
   mountProfileRegistration
 );
 
-function mountVerifyProfileAccess(req, res) {
-  return verifyProfileAccessHandler(req, res);
-}
-
-app.all(
-  ["/api/verify-profile-access", "/api/verify-profile-access/"],
-  mountVerifyProfileAccess
-);
-
-app.all(
-  ["/api/verify-completion-token", "/api/verify-completion-token/"],
-  function (req, res) {
-    return verifyCompletionTokenHandler(req, res);
-  }
-);
+app.all(["/api/verify", "/api/verify/"], function (req, res) {
+  return verifyHandler(req, res);
+});
 
 app.all(
   ["/api/complete-registration", "/api/complete-registration/"],
@@ -151,7 +138,7 @@ var server = app.listen(PORT, function () {
   console.log("============================================================");
   console.log("  Underwritly local server  http://localhost:" + PORT);
   console.log(
-    "  APIs: early-access, verify-profile-access, profile-registration, verify-completion-token, complete-registration, session, login, logout, admin-*, health"
+    "  APIs: early-access, verify, profile-registration, complete-registration, session, login, logout, admin-*, health"
   );
   console.log("  Readiness: GET /api/health");
   console.log("  Back office: http://localhost:" + PORT + "/admin.html");

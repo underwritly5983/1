@@ -209,8 +209,7 @@
   if (!token) {
     showFatal("Open the completion link from your email, or sign in if you already finished setup.");
   } else {
-    var verifyUrl =
-      "/api/verify-completion-token?complete_token=" + encodeURIComponent(token);
+    var verifyUrl = "/api/verify?complete_token=" + encodeURIComponent(token);
     fetch(verifyUrl, { method: "GET", cache: "no-store" })
       .then(function (res) {
         return res.text().then(function (text) {

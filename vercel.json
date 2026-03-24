@@ -7,10 +7,7 @@
     "api/profile-registration.js": {
       "maxDuration": 10
     },
-    "api/verify-profile-access.js": {
-      "maxDuration": 10
-    },
-    "api/verify-completion-token.js": {
+    "api/verify.js": {
       "maxDuration": 10
     },
     "api/complete-registration.js": {

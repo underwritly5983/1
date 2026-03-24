@@ -146,8 +146,7 @@
     }
     if (!token) return;
 
-    var verifyUrl =
-      "/api/verify-profile-access?profile_access=" + encodeURIComponent(token);
+    var verifyUrl = "/api/verify?profile_access=" + encodeURIComponent(token);
     fetch(verifyUrl, { method: "GET", cache: "no-store" })
       .then(function (res) {
         return res.text().then(function (text) {
