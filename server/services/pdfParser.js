@@ -62,6 +62,13 @@ function parseFlexibleDate(input) {
     return Number.isNaN(dt.getTime()) ? null : dt;
   }
 
+  // DD-Mon-YYYY (e.g., 01-Jan-2025)
+  m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m) {
+    const dt = new Date(Date.parse(`${m[2]} ${m[1]}, ${m[3]}`));
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
   return null;
 }
 
@@ -75,6 +82,7 @@ function quarterFromStartDate(startDate) {
 
 function extractPeriodDates(firstPageText) {
   const text = String(firstPageText || '');
+  const compact = text.replace(/\s+/g, '');
 
   // Common labels in IFTA reports
   const startLabelPatterns = [
@@ -94,6 +102,15 @@ function extractPeriodDates(firstPageText) {
       if (start) break;
     }
   }
+  if (!start) {
+    for (const re of startLabelPatterns) {
+      const m = compact.match(re);
+      if (m && m[1]) {
+        start = parseFlexibleDate(m[1]);
+        if (start) break;
+      }
+    }
+  }
 
   let end = null;
   for (const re of endLabelPatterns) {
@@ -101,6 +118,64 @@ function extractPeriodDates(firstPageText) {
     if (m && m[1]) {
       end = parseFlexibleDate(m[1]);
       if (end) break;
+    }
+  }
+  if (!end) {
+    for (const re of endLabelPatterns) {
+      const m = compact.match(re);
+      if (m && m[1]) {
+        end = parseFlexibleDate(m[1]);
+        if (end) break;
+      }
+    }
+  }
+
+  // Heuristic fallback: pick the best (start,end) pair that looks like a quarter
+  if (!start || !end) {
+    const dateTokens = [];
+    const tokenRe = /(\d{1,2}-[A-Za-z]{3}-\d{4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/g;
+    let mm;
+    while ((mm = tokenRe.exec(text)) !== null) {
+      const dt = parseFlexibleDate(mm[1]);
+      if (dt) dateTokens.push(dt);
+    }
+
+    const isQuarterStart = (d) => {
+      const m = d.getUTCMonth() + 1;
+      const day = d.getUTCDate();
+      return day === 1 && (m === 1 || m === 4 || m === 7 || m === 10);
+    };
+    const isQuarterEnd = (d) => {
+      const m = d.getUTCMonth() + 1;
+      const day = d.getUTCDate();
+      return (m === 3 && day === 31) || (m === 6 && day === 30) || (m === 9 && day === 30) || (m === 12 && day === 31);
+    };
+
+    let best = null;
+    for (let i = 0; i < dateTokens.length; i++) {
+      for (let j = 0; j < dateTokens.length; j++) {
+        if (i === j) continue;
+        const a = dateTokens[i];
+        const b = dateTokens[j];
+        if (a.getTime() >= b.getTime()) continue;
+        const days = Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+        if (days < 10 || days > 120) continue;
+
+        let score = 0;
+        if (isQuarterStart(a)) score += 5;
+        if (isQuarterEnd(b)) score += 5;
+        // Prefer pairs that look like same-year quarter (most IFTA reports)
+        if (a.getUTCFullYear() === b.getUTCFullYear()) score += 1;
+        // Prefer typical quarter lengths (~90 days)
+        score -= Math.abs(days - 90) / 30;
+
+        if (!best || score > best.score) best = { start: a, end: b, score };
+      }
+    }
+
+    if (best) {
+      start = start || best.start;
+      end = end || best.end;
     }
   }
 
