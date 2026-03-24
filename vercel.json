@@ -9,6 +9,36 @@
     },
     "api/verify-profile-access.js": {
       "maxDuration": 10
+    },
+    "api/verify-completion-token.js": {
+      "maxDuration": 10
+    },
+    "api/complete-registration.js": {
+      "maxDuration": 10
+    },
+    "api/session.js": {
+      "maxDuration": 10
+    },
+    "api/login.js": {
+      "maxDuration": 10
+    },
+    "api/logout.js": {
+      "maxDuration": 10
+    },
+    "api/admin-login.js": {
+      "maxDuration": 10
+    },
+    "api/admin-logout.js": {
+      "maxDuration": 10
+    },
+    "api/admin-session.js": {
+      "maxDuration": 10
+    },
+    "api/admin-submissions.js": {
+      "maxDuration": 10
+    },
+    "api/health.js": {
+      "maxDuration": 10
     }
   },
   "headers": [

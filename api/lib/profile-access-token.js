@@ -79,28 +79,30 @@ function verifyProfileAccessToken(token) {
   return { ok: true, email: json.e };
 }
 
-function getPublicSiteBase() {
+/**
+ * Customer emails must never use VERCEL_URL (avoids *.vercel.app in inboxes).
+ * Set SITE_URL or PUBLIC_SITE_URL to your public domain (e.g. https://underwritly.com).
+ */
+function getPublicSiteBaseForEmail() {
   var explicit = (process.env.SITE_URL || process.env.PUBLIC_SITE_URL || "").trim().replace(
     /\/$/,
     ""
   );
-  if (explicit) return explicit;
-  var v = (process.env.VERCEL_URL || "").trim();
-  if (v) return "https://" + v.replace(/^https?:\/\//, "");
-  return "";
+  return explicit || "";
 }
 
-function buildProfileRegistrationLink(token) {
+function buildProfileRegistrationEmailLink(token) {
   if (!token) return "";
-  var base = getPublicSiteBase();
-  var path = "/?profile_access=" + encodeURIComponent(token) + "#profile-registration";
-  return base ? base + path : path;
+  var base = getPublicSiteBaseForEmail();
+  if (!base) return "";
+  return base + "/register.html?profile_access=" + encodeURIComponent(token);
 }
 
 module.exports = {
   signProfileAccessToken: signProfileAccessToken,
   verifyProfileAccessToken: verifyProfileAccessToken,
-  buildProfileRegistrationLink: buildProfileRegistrationLink,
+  buildProfileRegistrationEmailLink: buildProfileRegistrationEmailLink,
+  getPublicSiteBaseForEmail: getPublicSiteBaseForEmail,
   hasSigningSecret: function () {
     return !!getSecret();
   },

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Back office — Underwritly (local)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-admin">
+    <header class="site-header admin-header">
+      <div class="container header-inner">
+        <p class="admin-brand">Underwritly — back office</p>
+        <nav class="nav admin-nav" aria-label="Admin">
+          <span id="admin-user-label" class="admin-user-label hidden"></span>
+          <button type="button" class="btn btn-ghost btn-nav-logout hidden" id="admin-logout-btn">
+            Sign out
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div id="admin-login-panel" class="container narrow">
+        <header class="section-head section-head--center">
+          <h1 class="section-title">Admin sign in</h1>
+          <p class="section-sub">
+            Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> in environment variables
+            (Vercel project settings for production, or <code>.env</code> when using
+            <code>npm start</code>). Use a strong password in production. After signing in, keep the
+            same site origin (<code>localhost</code> vs <code>127.0.0.1</code>) for the whole session.
+          </p>
+        </header>
+
+        <form class="access-form" id="admin-login-form" autocomplete="off">
+          <div class="form-row">
+            <label for="admin-email">Email</label>
+            <input type="email" id="admin-email" name="email" required autocomplete="username" />
+            <p class="field-error" id="admin-email-error" role="alert"></p>
+          </div>
+          <div class="form-row">
+            <label for="admin-password">Password</label>
+            <input
+              type="password"
+              id="admin-password"
+              name="password"
+              required
+              autocomplete="current-password"
+            />
+            <p class="field-error" id="admin-password-error" role="alert"></p>
+          </div>
+          <p class="field-error form-submit-error hidden" id="admin-form-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary btn-block" id="admin-login-submit">Sign in</button>
+        </form>
+      </div>
+
+      <div id="admin-app" class="hidden">
+        <div class="container admin-container">
+          <p class="admin-lead">
+            Submissions use <strong>Vercel KV</strong> (Redis) when <code>KV_REST_API_URL</code> /
+            <code>KV_REST_API_TOKEN</code> are set; otherwise locally they use
+            <code>.data/submissions.sqlite</code>. Configure the same KV as user accounts for hosted
+            deployments.
+          </p>
+
+          <section class="admin-section" aria-labelledby="early-access-heading">
+            <h2 id="early-access-heading" class="admin-section-title">Early access requests</h2>
+            <div class="admin-table-wrap">
+              <table class="admin-table" id="table-early">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Received</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Phone</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Usage</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-early"></tbody>
+              </table>
+              <p id="empty-early" class="admin-empty hidden">No rows yet.</p>
+            </div>
+          </section>
+
+          <section class="admin-section" aria-labelledby="profile-heading">
+            <h2 id="profile-heading" class="admin-section-title">Profile registrations</h2>
+            <div class="admin-table-wrap">
+              <table class="admin-table" id="table-profile">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Received</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Phone</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-profile"></tbody>
+              </table>
+              <p id="empty-profile" class="admin-empty hidden">No rows yet.</p>
+            </div>
+          </section>
+
+          <section class="admin-section" aria-labelledby="acct-heading">
+            <h2 id="acct-heading" class="admin-section-title">Account completions</h2>
+            <p class="admin-section-hint">Users who finished password + optional logo setup.</p>
+            <div class="admin-table-wrap">
+              <table class="admin-table" id="table-acct">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Received</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Completed</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-acct"></tbody>
+              </table>
+              <p id="empty-acct" class="admin-empty hidden">No rows yet.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>Protect admin credentials — treat this like internal tooling.</p>
+      </div>
+    </footer>
+
+    <script src="admin-page.js"></script>
+  </body>
+</html>

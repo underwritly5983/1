@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Finish your Underwritly account — password and optional company logo."
+    />
+    <title>Complete registration — Underwritly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-register page-complete-registration">
+    <div id="api-env-warning" class="dev-api-warning hidden" role="status" aria-live="polite">
+      <strong>Local setup:</strong> Use <code>npm start</code> from this folder so API routes work.
+    </div>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <img
+            src="assets/logo.PNG"
+            alt="Underwritly"
+            width="520"
+            height="134"
+            class="brand-logo"
+            decoding="async"
+          />
+        </a>
+        <nav class="nav" aria-label="Primary">
+          <a href="/">Home</a>
+          <a href="/login.html">Sign in</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section
+        id="complete-registration"
+        class="profile-registration profile-registration--lead profile-gate profile-gate--locked"
+        aria-hidden="true"
+      >
+        <div class="container narrow">
+          <header class="section-head section-head--center">
+            <h2 class="section-title">Finish your account</h2>
+            <p class="section-sub" id="complete-lead-copy">
+              Verifying your link…
+            </p>
+          </header>
+
+          <form class="access-form hidden" id="complete-registration-form" novalidate>
+            <div class="form-row">
+              <label for="complete-email">Work email</label>
+              <input type="email" id="complete-email" readonly autocomplete="email" />
+            </div>
+
+            <div class="form-row">
+              <label for="complete-password">Password</label>
+              <input
+                type="password"
+                id="complete-password"
+                name="password"
+                autocomplete="new-password"
+                required
+                minlength="10"
+                placeholder="At least 10 characters, with a letter and a number"
+              />
+              <p class="field-hint">Required. Use at least 10 characters, including a letter and a number.</p>
+              <p class="field-error" id="complete-password-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="complete-password2">Confirm password</label>
+              <input
+                type="password"
+                id="complete-password2"
+                name="password2"
+                autocomplete="new-password"
+                required
+                minlength="10"
+                placeholder="Re-enter password"
+              />
+              <p class="field-error" id="complete-password2-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="complete-logo">Company logo (optional)</label>
+              <input type="file" id="complete-logo" name="logo" accept="image/png,image/jpeg,image/webp" />
+              <p class="field-hint">PNG, JPEG, or WebP. Max 256 KB.</p>
+              <div id="complete-logo-preview" class="logo-preview hidden" aria-hidden="true">
+                <img id="complete-logo-preview-img" alt="Logo preview" width="160" height="80" />
+              </div>
+              <p class="field-error" id="complete-logo-error" role="alert"></p>
+            </div>
+
+            <p class="field-error form-submit-error hidden" id="complete-form-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="complete-submit-btn">
+              Save and open dashboard
+            </button>
+          </form>
+
+          <div class="form-error-banner hidden" id="complete-token-error" role="alert">
+            <p class="error-banner-title">Link not valid</p>
+            <p class="error-banner-body" id="complete-token-error-msg"></p>
+            <p class="error-banner-body">
+              <a href="mailto:info@underwritly.com">Contact info@underwritly.com</a> if you need a new link.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>© <span id="year"></span> Underwritly. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <div id="page-toast" class="page-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="complete-page.js"></script>
+  </body>
+</html>

@@ -110,6 +110,7 @@
     try {
       sessionStorage.setItem(PROFILE_ACCESS_STORAGE, token);
     } catch (ignore) {}
+    document.body.classList.add("page-profile-flow");
     if (profileSection) {
       profileSection.classList.remove("profile-gate--locked");
       profileSection.setAttribute("aria-hidden", "false");
@@ -173,11 +174,9 @@
               /* ignore */
             }
           }
-          if (window.location.hash === "#profile-registration") {
-            requestAnimationFrame(function () {
-              profileSection.scrollIntoView({ behavior: "smooth", block: "start" });
-            });
-          }
+          requestAnimationFrame(function () {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+          });
           return;
         }
         try {
@@ -405,7 +404,7 @@
           if (result.ok) {
             profileForm.classList.add("hidden");
             if (profileSuccess) profileSuccess.classList.remove("hidden");
-            showToast("Profile saved — check your inbox for confirmation.", "success");
+            showToast("Profile saved — check your email to finish setup and open your dashboard.", "success");
             return;
           }
           var msg =

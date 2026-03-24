@@ -1,11 +1,15 @@
 /**
- * Profile registration: internal notification + confirmation email to the registrant.
- * Env: same as early-access (SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_EMAIL).
+ * Profile registration: internal notification + email to the registrant with a completion link.
+ * Env: same as early-access (SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_EMAIL), plus SITE_URL for links.
+ * Saves a profile draft to KV (or local .data/users.json) when storage is available.
  * POST body must include profileAccessToken from the early-access confirmation email link.
  */
 
 var nodemailer = require("nodemailer");
 var tokenLib = require("./lib/profile-access-token");
+var completionLib = require("./lib/completion-token");
+var userStore = require("./lib/user-store");
+var submissionsDb = require("./lib/submissions-db");
 
 function escapeHtml(s) {
   return String(s)
@@ -197,6 +201,22 @@ module.exports = async function handler(req, res) {
 
     var d = validated.data;
 
+    try {
+      await userStore.putProfileDraft(d.email.trim().toLowerCase(), {
+        name: d.name,
+        email: d.email,
+        company: d.company,
+        role: d.role,
+        phone: d.phone,
+        submittedAt: d.submittedAt,
+      });
+    } catch (draftErr) {
+      console.error("[profile-registration] putProfileDraft", draftErr);
+    }
+
+    var completionTok = completionLib.signCompletionToken(d.email);
+    var completeLink = completionLib.buildCompleteRegistrationEmailLink(completionTok || "");
+
     var internalText =
       "New profile registration\n\n" +
       "Full name: " +
@@ -240,29 +260,41 @@ module.exports = async function handler(req, res) {
       "</td></tr>" +
       "</table>";
 
-    var confirmSubject = "Profile registration received — Underwritly";
+    var confirmSubject = "You're in — finish your Underwritly account";
+    var firstName = d.name.split(/\s+/)[0];
+    var completeParagraphText = completeLink
+      ? "To finish setting up your account, open this link (or paste it into your browser). You'll choose a password (required) and can upload your company logo (optional). After that you'll be signed in to your dashboard:\n\n" +
+        completeLink +
+        "\n\n"
+      : "Finish setting up your account by choosing a password and optional company logo on our site. If this message does not include a button or link, your administrator may need to set SITE_URL for this project, or you can email info@underwritly.com and we'll help.\n\n";
+
     var confirmText =
       "Hi " +
-      d.name.split(/\s+/)[0] +
+      firstName +
       ",\n\n" +
-      "Thank you for registering your profile with Underwritly. We have saved your details and " +
-      "sent this message as confirmation.\n\n" +
-      "Our team may follow up at " +
-      d.email +
-      " when your account or onboarding steps are ready.\n\n" +
-      "Questions? Reply to this email or write to info@underwritly.com.\n\n" +
+      "Congratulations — your broker profile is set up with Underwritly. We're glad you're here.\n\n" +
+      completeParagraphText +
+      "This link is private; don't forward it. If it expires, reply to this email or write to info@underwritly.com.\n\n" +
       "— The Underwritly team";
+
+    var completeBlockHtml = completeLink
+      ? "<p><strong>Next step:</strong> choose your password (required) and optionally upload your company logo. Then you'll land in your dashboard.</p>" +
+        '<p style="margin:1.25rem 0;"><a href="' +
+        escapeHtml(completeLink) +
+        '" style="display:inline-block;padding:12px 22px;background:#1e40af;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;">Complete registration</a></p>' +
+        "<p style=\"font-size:13px;color:#64748b;word-break:break-all;\">If the button doesn't work, copy and paste this URL:<br/>" +
+        escapeHtml(completeLink) +
+        "</p>"
+      : "<p><strong>Next step:</strong> your team still needs to configure the public site URL so we can send you a secure completion link. Email " +
+        '<a href="mailto:info@underwritly.com">info@underwritly.com</a> if you need help.</p>';
 
     var confirmHtml =
       "<p>Hi " +
-      escapeHtml(d.name.split(/\s+/)[0]) +
+      escapeHtml(firstName) +
       ",</p>" +
-      "<p>Thank you for registering your profile with <strong>Underwritly</strong>. We have saved your details and " +
-      "sent this message as confirmation.</p>" +
-      "<p>Our team may follow up at " +
-      escapeHtml(d.email) +
-      " when your account or onboarding steps are ready.</p>" +
-      "<p>Questions? Reply to this email or contact " +
+      "<p>Congratulations — your broker profile is set up with <strong>Underwritly</strong>. We're glad you're here.</p>" +
+      completeBlockHtml +
+      "<p>This link is private; don't forward it. If it expires, reply to this email or contact " +
       '<a href="mailto:info@underwritly.com">info@underwritly.com</a>.</p>' +
       "<p>— The Underwritly team</p>";
 
@@ -284,11 +316,13 @@ module.exports = async function handler(req, res) {
         text: confirmText,
         html: confirmHtml,
       });
+
+      await submissionsDb.insertProfileRegistration(d);
     } catch (err) {
       console.error("[profile-registration] sendMail", err && err.message, err && err.code, err);
       return sendJson(res, 502, {
         error:
-          "We could not send the emails. Check Vercel logs for SMTP errors. Or email info@underwritly.com.",
+          "We could not send the emails. Check your hosting logs for SMTP errors. Or email info@underwritly.com.",
       });
     } finally {
       try {

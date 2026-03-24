@@ -433,6 +433,59 @@ a:hover {
   border-top: 1px solid var(--border);
 }
 
+.profile-registration--lead {
+  border-top: none;
+  padding-top: clamp(1.25rem, 3vw, 2rem);
+  padding-bottom: clamp(3rem, 7vw, 4.5rem);
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg) 100%);
+}
+
+body.page-profile-flow .hero,
+body.page-profile-flow #features,
+body.page-profile-flow #early-access {
+  display: none !important;
+}
+
+body.page-profile-flow .site-header .nav {
+  display: none;
+}
+
+/* register.html: keep Home visible after unlock (no landing nav to hide). */
+body.page-register.page-profile-flow .site-header .nav {
+  display: flex;
+}
+
+body.page-register.page-profile-flow .header-inner {
+  justify-content: space-between;
+}
+
+body.page-register.page-profile-flow .brand {
+  max-width: min(540px, 100%);
+  justify-content: flex-start;
+}
+
+body.page-register.page-profile-flow .brand-logo {
+  object-position: left center;
+}
+
+body.page-profile-flow .header-inner {
+  justify-content: center;
+}
+
+body.page-profile-flow .brand {
+  max-width: 100%;
+  justify-content: center;
+}
+
+body.page-profile-flow .brand-logo {
+  object-position: center center;
+}
+
+/* Standalone registration page (no landing sections in the document). */
+body.page-register main#top {
+  min-height: min(70vh, 720px);
+}
+
 .profile-gate--locked {
   display: none !important;
 }
@@ -626,5 +679,285 @@ a:hover {
   font-size: 0.8125rem;
   padding: 0.1em 0.35em;
   background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+}
+
+.field-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-subtle);
+}
+
+.form-row input[type="file"] {
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  border: none;
+  background: transparent;
+}
+
+.form-error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.35rem;
+  text-align: left;
+}
+
+.error-banner-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.error-banner-body {
+  margin: 0 0 0.65rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: #7f1d1d;
+}
+
+.error-banner-body:last-child {
+  margin-bottom: 0;
+}
+
+.logo-preview {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  display: inline-block;
+  max-width: 100%;
+}
+
+.logo-preview img {
+  display: block;
+  max-height: 96px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.dashboard-state {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.dashboard-card {
+  margin-top: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.35rem;
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+.dashboard-card-header {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-logo-wrap {
+  flex-shrink: 0;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.dashboard-logo {
+  display: block;
+  max-height: 56px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+.dashboard-name {
+  margin: 0 0 0.2rem;
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.dashboard-meta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.dashboard-dl {
+  margin: 0;
+}
+
+.dashboard-dl-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+}
+
+.dashboard-dl-row:last-child {
+  border-bottom: none;
+}
+
+.dashboard-dl-row dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+
+.dashboard-dl-row dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.site-header .nav .btn-nav-logout {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #cbd5e1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.site-header .nav .btn-nav-logout:hover {
+  color: #f8fafc;
+  text-decoration: none;
+}
+
+/* Local admin back office (admin.html) */
+body.page-admin .admin-header .header-inner {
+  justify-content: space-between;
+}
+
+.admin-brand {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #e2e8f0;
+}
+
+.admin-nav {
+  gap: 1rem;
+}
+
+.admin-user-label {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+
+.admin-main {
+  min-height: min(72vh, 900px);
+  padding: 2rem 0 3rem;
+  background: var(--bg);
+}
+
+.admin-lead {
+  margin: 0 0 2rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.admin-lead code {
+  font-size: 0.8125rem;
+  padding: 0.1em 0.35em;
+  background: var(--bg-subtle);
+  border-radius: 4px;
+}
+
+.admin-container {
+  width: min(1200px, 100% - 2rem);
+}
+
+.admin-section {
+  margin-bottom: 2.5rem;
+}
+
+.admin-section-title {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-heading);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-section-hint {
+  margin: -0.25rem 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-subtle);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr:hover td {
+  background: var(--accent-tint);
+}
+
+.admin-empty {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-subtle);
+}
+
+body.page-admin .section-sub code {
+  font-size: 0.8125rem;
+  padding: 0.1em 0.35em;
+  background: var(--bg-subtle);
   border-radius: 4px;
 }

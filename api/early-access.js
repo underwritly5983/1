@@ -11,12 +11,13 @@
  *   MAIL_FROM — required; should match SMTP_USER for Gmail (e.g. "Name <you@gmail.com>")
  *   NOTIFY_EMAIL — optional, defaults to info@underwritly.com
  *   PROFILE_ACCESS_SECRET — required for the profile registration link in the confirmation email
- *   SITE_URL or PUBLIC_SITE_URL — optional; otherwise VERCEL_URL is used for absolute links
+ *   SITE_URL or PUBLIC_SITE_URL — required for the profile link in confirmation email (never uses VERCEL_URL in email)
  *   PROFILE_ACCESS_TTL_SECONDS — optional, default 30 days
  */
 
 var nodemailer = require("nodemailer");
 var profileAccess = require("./lib/profile-access-token");
+var submissionsDb = require("./lib/submissions-db");
 
 var SOURCE_LABELS = {
   search: "Search engine",
@@ -253,29 +254,33 @@ module.exports = async function handler(req, res) {
       "</table>";
 
     var profileToken = profileAccess.signProfileAccessToken(d.email);
-    var profileLink = profileToken ? profileAccess.buildProfileRegistrationLink(profileToken) : "";
+    var profileLink = profileToken ? profileAccess.buildProfileRegistrationEmailLink(profileToken) : "";
     if (!profileAccess.hasSigningSecret()) {
       console.warn("[early-access] PROFILE_ACCESS_SECRET is not set; confirmation email will not include a profile registration link.");
+    } else if (profileToken && !profileLink) {
+      console.warn(
+        "[early-access] SITE_URL or PUBLIC_SITE_URL is not set — confirmation email cannot include a profile link (deployment URLs are not used in customer email). Set SITE_URL to your public site, e.g. https://yourdomain.com"
+      );
     }
 
-    var registerBlurbText =
-      profileLink ?
-        "\n\nComplete your broker profile (private link for you):\n" +
-        profileLink +
-        "\n\nThis link only works for the email address you used above. Do not forward it.\n" :
-        "";
-
+    var registerBlurbText = "";
     var registerBlurbHtml = "";
     if (profileLink) {
+      registerBlurbText =
+        "\n\nNext step — register your broker profile (private link for this email only; do not forward):\n" +
+        profileLink +
+        "\n";
       registerBlurbHtml =
-        "<p><strong>Next step:</strong> complete your broker profile using the private link below. " +
+        "<p><strong>Next step:</strong> complete your broker profile using the button below. " +
         "It only works for this email address—please do not forward it.</p>" +
         "<p><a href=\"" +
         escapeHtml(profileLink) +
-        "\">Register your profile</a></p>" +
-        "<p style=\"font-size:13px;color:#64748b;word-break:break-all;\">" +
-        escapeHtml(profileLink) +
-        "</p>";
+        "\" style=\"display:inline-block;padding:12px 20px;background:#059669;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;\">Register your profile</a></p>";
+    } else if (profileToken && profileAccess.hasSigningSecret()) {
+      registerBlurbText =
+        "\n\nWe will follow up with a secure link to complete your broker profile.\n";
+      registerBlurbHtml =
+        "<p><strong>Next step:</strong> we will follow up with a secure link to complete your broker profile.</p>";
     }
 
     var confirmSubject = "We received your early access request — Underwritly";
@@ -324,11 +329,13 @@ module.exports = async function handler(req, res) {
         text: confirmText,
         html: confirmHtml,
       });
+
+      await submissionsDb.insertEarlyAccess(d);
     } catch (err) {
       console.error("[early-access] sendMail", err && err.message, err && err.code, err);
       return sendJson(res, 502, {
         error:
-          "We could not send the emails. Check Vercel logs for SMTP errors. If you use Gmail, confirm App Password and that MAIL_FROM matches SMTP_USER. Or email info@underwritly.com.",
+          "We could not send the emails. Check your hosting logs for SMTP errors. If you use Gmail, confirm App Password and that MAIL_FROM matches SMTP_USER. Or email info@underwritly.com.",
       });
     } finally {
       try {

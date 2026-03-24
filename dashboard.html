@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Your Underwritly broker dashboard." />
+    <title>Dashboard — Underwritly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-register page-dashboard">
+    <div id="api-env-warning" class="dev-api-warning hidden" role="status" aria-live="polite">
+      <strong>Local setup:</strong> Use <code>npm start</code> from this folder so API routes work.
+    </div>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <img
+            src="assets/logo.PNG"
+            alt="Underwritly"
+            width="520"
+            height="134"
+            class="brand-logo"
+            decoding="async"
+          />
+        </a>
+        <nav class="nav" aria-label="Primary">
+          <a href="/">Home</a>
+          <button type="button" class="btn btn-ghost btn-nav-logout hidden" id="dashboard-logout">
+            Sign out
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="profile-registration profile-registration--lead">
+        <div class="container narrow">
+          <div id="dashboard-loading" class="dashboard-state">
+            <p class="section-sub">Loading your account…</p>
+          </div>
+
+          <div id="dashboard-guest" class="dashboard-state hidden" role="status">
+            <header class="section-head section-head--center">
+              <h2 class="section-title">Sign in required</h2>
+              <p class="section-sub">
+                Your session has expired or you are not signed in. Use the link from your email to
+                finish registration, or sign in below.
+              </p>
+            </header>
+            <p class="section-head section-head--center" style="margin-top: 1rem">
+              <a class="btn btn-primary" href="/login.html">Sign in</a>
+            </p>
+          </div>
+
+          <div id="dashboard-content" class="hidden">
+            <header class="section-head section-head--center">
+              <h2 class="section-title">Your dashboard</h2>
+              <p class="section-sub">Welcome back. This is your home base while we expand the product.</p>
+            </header>
+
+            <div class="dashboard-card">
+              <div class="dashboard-card-header">
+                <div class="dashboard-identity">
+                  <div id="dashboard-logo-wrap" class="dashboard-logo-wrap hidden">
+                    <img id="dashboard-logo" alt="" width="120" height="60" class="dashboard-logo" />
+                  </div>
+                  <div>
+                    <p class="dashboard-name" id="dashboard-name"></p>
+                    <p class="dashboard-meta" id="dashboard-email"></p>
+                  </div>
+                </div>
+              </div>
+              <dl class="dashboard-dl">
+                <div class="dashboard-dl-row">
+                  <dt>Company</dt>
+                  <dd id="dashboard-company">—</dd>
+                </div>
+                <div class="dashboard-dl-row">
+                  <dt>Role</dt>
+                  <dd id="dashboard-role">—</dd>
+                </div>
+                <div class="dashboard-dl-row">
+                  <dt>Phone</dt>
+                  <dd id="dashboard-phone">—</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>© <span id="year"></span> Underwritly. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script src="dashboard-page.js"></script>
+  </body>
+</html>

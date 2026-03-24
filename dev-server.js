@@ -4,6 +4,7 @@
  *
  * Copy `.env.example` to `.env` and set SMTP_*, MAIL_FROM, PROFILE_ACCESS_SECRET (same value as on Vercel).
  * Optional: SITE_URL=http://localhost:PORT for clickable absolute links in confirmation emails.
+ * Optional: USER_STORE=file to force local JSON storage when KV_* env vars are set but not for this project.
  */
 
 var path = require("path");
@@ -13,6 +14,16 @@ var express = require("express");
 var earlyAccessHandler = require("./api/early-access");
 var profileRegistrationHandler = require("./api/profile-registration");
 var verifyProfileAccessHandler = require("./api/verify-profile-access");
+var verifyCompletionTokenHandler = require("./api/verify-completion-token");
+var completeRegistrationHandler = require("./api/complete-registration");
+var sessionHandler = require("./api/session");
+var loginHandler = require("./api/login");
+var logoutHandler = require("./api/logout");
+var adminLoginHandler = require("./api/admin-login");
+var adminLogoutHandler = require("./api/admin-logout");
+var adminSessionHandler = require("./api/admin-session");
+var adminSubmissionsHandler = require("./api/admin-submissions");
+var healthHandler = require("./api/health");
 
 var app = express();
 var PORT = parseInt(process.env.PORT || "3456", 10);
@@ -31,7 +42,15 @@ if (!profileSecret) {
   );
 }
 
-app.use(express.json({ limit: "1mb" }));
+var adminEmail = (process.env.ADMIN_EMAIL || "").trim();
+var adminPass = process.env.ADMIN_PASSWORD;
+if (!adminEmail || adminPass == null || String(adminPass).length === 0) {
+  console.warn(
+    "[dev-server] ADMIN_EMAIL / ADMIN_PASSWORD not set — back office login disabled until you add them to .env (see .env.example)."
+  );
+}
+
+app.use(express.json({ limit: "3mb" }));
 
 app.use(function (req, res, next) {
   console.log("[dev-server]", req.method, req.originalUrl || req.url);
@@ -62,6 +81,52 @@ app.all(
   mountVerifyProfileAccess
 );
 
+app.all(
+  ["/api/verify-completion-token", "/api/verify-completion-token/"],
+  function (req, res) {
+    return verifyCompletionTokenHandler(req, res);
+  }
+);
+
+app.all(
+  ["/api/complete-registration", "/api/complete-registration/"],
+  function (req, res) {
+    return completeRegistrationHandler(req, res);
+  }
+);
+
+app.all(["/api/session", "/api/session/"], function (req, res) {
+  return sessionHandler(req, res);
+});
+
+app.all(["/api/login", "/api/login/"], function (req, res) {
+  return loginHandler(req, res);
+});
+
+app.all(["/api/logout", "/api/logout/"], function (req, res) {
+  return logoutHandler(req, res);
+});
+
+app.all(["/api/admin-login", "/api/admin-login/"], function (req, res) {
+  return adminLoginHandler(req, res);
+});
+
+app.all(["/api/admin-logout", "/api/admin-logout/"], function (req, res) {
+  return adminLogoutHandler(req, res);
+});
+
+app.all(["/api/admin-session", "/api/admin-session/"], function (req, res) {
+  return adminSessionHandler(req, res);
+});
+
+app.all(["/api/admin-submissions", "/api/admin-submissions/"], function (req, res) {
+  return adminSubmissionsHandler(req, res);
+});
+
+app.all(["/api/health", "/api/health/"], function (req, res) {
+  return healthHandler(req, res);
+});
+
 app.use(
   express.static(path.join(__dirname), {
     index: ["index.html"],
@@ -86,8 +151,11 @@ var server = app.listen(PORT, function () {
   console.log("============================================================");
   console.log("  Underwritly local server  http://localhost:" + PORT);
   console.log(
-    "  APIs: POST /api/early-access, GET /api/verify-profile-access, POST /api/profile-registration"
+    "  APIs: early-access, verify-profile-access, profile-registration, verify-completion-token, complete-registration, session, login, logout, admin-*, health"
   );
+  console.log("  Readiness: GET /api/health");
+  console.log("  Back office: http://localhost:" + PORT + "/admin.html");
+  console.log("  Set ADMIN_EMAIL + ADMIN_PASSWORD in .env (same vars on Vercel for production admin).");
   console.log("  If you see 404 on /api/*, you are NOT running this server —");
   console.log("  use: npm start   (not: npm run start:static / plain serve)");
   console.log("============================================================");
