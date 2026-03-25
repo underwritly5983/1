@@ -90,46 +90,67 @@ const generateSummaryPDF = async (reportData, user) => {
         doc.fontSize(14).font('Helvetica-Bold').text('Jurisdiction Summary by State/Province/Territory', { underline: true });
         doc.moveDown(0.5);
 
-        // Table headers
+        const jd = reportData.jurisdictionData;
+        const periods = reportData.quarters || [];
+        let numPeriodCols = periods.length;
+        if (jd.jurisdictions[0]?.quarters?.length) {
+          numPeriodCols = Math.max(numPeriodCols, jd.jurisdictions[0].quarters.length);
+        }
+        numPeriodCols = Math.max(numPeriodCols, 1);
+        const jColW = 72;
+        const pColW = 44;
+        const startX = 50;
+        let totalKmX = startX + jColW + numPeriodCols * pColW + 6;
+        const pctX = totalKmX + 68;
+        const tableEndX = Math.min(pctX + 44, 520);
+
         doc.fontSize(9).font('Helvetica-Bold');
         const headerY = doc.y;
-        doc.text('Jurisdiction', 50, headerY);
-        doc.text('Q1', 150, headerY);
-        doc.text('Q2', 200, headerY);
-        doc.text('Q3', 250, headerY);
-        doc.text('Q4', 300, headerY);
-        doc.text('Total KM', 350, headerY);
-        doc.text('%', 450, headerY);
+        doc.text('Jurisdiction', startX, headerY, { width: jColW - 4 });
+        let hx = startX + jColW;
+        for (let i = 0; i < numPeriodCols; i++) {
+          const q = periods[i];
+          const label =
+            q && q.quarter != null && q.year != null
+              ? `${String(q.quarter).trim()} ${q.year}`.slice(0, 12)
+              : `P${i + 1}`;
+          doc.text(label, hx, headerY, { width: pColW, align: 'right' });
+          hx += pColW;
+        }
+        doc.text('Total KM', totalKmX, headerY, { width: 64, align: 'right' });
+        doc.text('%', pctX, headerY, { width: 40, align: 'right' });
         doc.moveDown(0.3);
-        doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
+        doc.moveTo(startX, doc.y).lineTo(tableEndX, doc.y).stroke();
         doc.moveDown(0.3);
 
-        // Table rows
         doc.font('Helvetica').fontSize(9);
-        reportData.jurisdictionData.jurisdictions.forEach((juris) => {
+        jd.jurisdictions.forEach((juris) => {
           if (doc.y > 700) {
             doc.addPage();
           }
 
           const y = doc.y;
-          doc.text(juris.code, 50, y);
-          juris.quarters.forEach((q, idx) => {
-            const x = 150 + (idx * 50);
-            doc.text(q ? q.km.toLocaleString() : '-', x, y, { width: 45, align: 'right' });
-          });
-          doc.text(juris.totalKM.toLocaleString(), 350, y, { width: 90, align: 'right' });
-          doc.text(`${juris.percentage.toFixed(2)}%`, 450, y, { width: 50, align: 'right' });
+          doc.text(String(juris.code || '').slice(0, 12), startX, y, { width: jColW - 4 });
+          let rx = startX + jColW;
+          for (let i = 0; i < numPeriodCols; i++) {
+            const q = (juris.quarters || [])[i];
+            const txt = q && q.km != null ? Number(q.km).toLocaleString() : '-';
+            doc.text(txt, rx, y, { width: pColW, align: 'right' });
+            rx += pColW;
+          }
+          doc.text(juris.totalKM != null ? juris.totalKM.toLocaleString() : '-', totalKmX, y, { width: 64, align: 'right' });
+          doc.text(`${(juris.percentage != null ? juris.percentage : 0).toFixed(2)}%`, pctX, y, { width: 40, align: 'right' });
           doc.moveDown(0.4);
         });
 
-        // Grand total
         doc.moveDown(0.3);
-        doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
+        doc.moveTo(startX, doc.y).lineTo(tableEndX, doc.y).stroke();
         doc.moveDown(0.3);
         doc.font('Helvetica-Bold');
-        doc.text('Grand Total', 50, doc.y);
-        doc.text(reportData.jurisdictionData.grandTotal.toLocaleString(), 350, doc.y, { width: 90, align: 'right' });
-        doc.text('100.00%', 450, doc.y, { width: 50, align: 'right' });
+        const gY = doc.y;
+        doc.text('Grand Total', startX, gY);
+        doc.text(jd.grandTotal != null ? jd.grandTotal.toLocaleString() : '0', totalKmX, gY, { width: 64, align: 'right' });
+        doc.text('100.00%', pctX, gY, { width: 40, align: 'right' });
       }
 
       doc.end();

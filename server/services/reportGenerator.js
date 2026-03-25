@@ -1,5 +1,81 @@
 const XLSX = require('xlsx');
+const { parseIftaSummaryJson } = require('../lib/parseIftaSummary');
 const { organizeByJurisdiction } = require('./jurisdictionExtractor');
+
+function cleanNameCandidate(value) {
+  const s = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return '';
+  if (s.length < 2 || s.length > 120) return '';
+  if (!/[A-Za-z]/.test(s)) return '';
+  return s;
+}
+
+function isWeakName(value) {
+  const s = String(value || '').toUpperCase();
+  if (!s) return true;
+  return (
+    s.includes('JURISDICTIONAL SUMMARY') ||
+    s.includes('IFTA') ||
+    s.includes('QUARTER') ||
+    s.includes('REPORT') ||
+    s.includes('TAX')
+  );
+}
+
+function extractInsuredNameFromRawText(rawText) {
+  const txt = String(rawText || '');
+  if (!txt) return '';
+
+  const inline = txt.match(/Jurisdictional\s+Summary\s*[:\-]?\s*([^\n\r]{2,120})/i);
+  if (inline && inline[1]) {
+    const c = cleanNameCandidate(inline[1]);
+    if (c && !isWeakName(c)) return c;
+  }
+
+  const lines = txt
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    if (/jurisdictional\s+summary/i.test(lines[i])) {
+      for (let j = i + 1; j <= Math.min(i + 6, lines.length - 1); j++) {
+        const c = cleanNameCandidate(lines[j]);
+        if (c && !isWeakName(c)) return c;
+      }
+    }
+  }
+  return '';
+}
+
+function pickPreferredInsuredName(reports, fallbackCompanyName) {
+  const counts = new Map();
+  const add = (v) => {
+    const c = cleanNameCandidate(v);
+    if (!c || isWeakName(c)) return;
+    counts.set(c, (counts.get(c) || 0) + 1);
+  };
+
+  for (const r of reports || []) {
+    const s = parseIftaSummaryJson(r.summary);
+    add(s.insuredName);
+    add(s.organizationName);
+    add(s.companyName);
+    add(extractInsuredNameFromRawText(r.rawText));
+  }
+  if (counts.size === 0) return cleanNameCandidate(fallbackCompanyName || '');
+
+  let best = '';
+  let bestCount = -1;
+  for (const [name, count] of counts.entries()) {
+    if (count > bestCount || (count === bestCount && name.length > best.length)) {
+      best = name;
+      bestCount = count;
+    }
+  }
+  return best || cleanNameCandidate(fallbackCompanyName || '');
+}
 
 const generateReport = async (reports, user) => {
   // Aggregate data from all reports
@@ -22,9 +98,7 @@ const generateReport = async (reports, user) => {
 
   // Process each report
   reports.forEach((report, index) => {
-    const summary = typeof report.summary === 'string' 
-      ? JSON.parse(report.summary) 
-      : report.summary;
+    const summary = parseIftaSummaryJson(report.summary);
 
     const quarterData = {
       quarter: report.quarter,
@@ -66,6 +140,9 @@ const generateReport = async (reports, user) => {
 
   // Convert Set to Array
   aggregatedData.allJurisdictions = Array.from(aggregatedData.allJurisdictions);
+  const preferredInsuredName = pickPreferredInsuredName(reports, user.company_name);
+  aggregatedData.insuredName = preferredInsuredName || null;
+  aggregatedData.companyName = preferredInsuredName || user.company_name;
 
   // Organize by jurisdiction for detailed view (only if we have raw text)
   try {
@@ -143,122 +220,100 @@ const generateExcelReport = (reportData) => {
   return workbook;
 };
 
-// Generate Excel file matching the template structure
+// Generate Excel file matching the IFTA SUMMARY.xlsx template structure
+// Template: sheet "DATA", header row has STATE, ZONE, Q1, Q2, Q3, Q4, YEAR, TOTAL, % of total
 const generateTemplateExcel = (reportData, templatePath) => {
   const XLSX = require('xlsx');
-  
-  // Read template if provided
+  const fs = require('fs');
+
   let workbook;
-  if (templatePath && require('fs').existsSync(templatePath)) {
+  if (templatePath && fs.existsSync(templatePath)) {
     workbook = XLSX.readFile(templatePath);
   } else {
     workbook = XLSX.utils.book_new();
   }
-  
-  const sheetName = workbook.SheetNames[0] || 'Sheet1';
+
+  const sheetName = workbook.SheetNames.includes('DATA') ? 'DATA' : (workbook.SheetNames[0] || 'Sheet1');
   let worksheet = workbook.Sheets[sheetName] || XLSX.utils.aoa_to_sheet([]);
   let data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-  
-  // Find header row
+
   let headerRow = -1;
   let stateCol = -1;
   let q1Col = -1, q2Col = -1, q3Col = -1, q4Col = -1;
   let totalCol = -1;
   let percentCol = -1;
-  let totalKMCol = -1;
-  
-  for (let i = 0; i < Math.min(5, data.length); i++) {
+
+  for (let i = 0; i < Math.min(12, data.length); i++) {
     const row = data[i];
-    if (Array.isArray(row)) {
-      for (let j = 0; j < row.length; j++) {
-        const cell = String(row[j] || '').toUpperCase();
-        if (cell.includes('STATE') || cell === 'STATE') {
-          stateCol = j;
-          if (headerRow < 0) headerRow = i;
-        }
-        if (cell === 'Q1' || cell.includes('Q1')) q1Col = j;
-        if (cell === 'Q2' || cell.includes('Q2')) q2Col = j;
-        if (cell === 'Q3' || cell.includes('Q3')) q3Col = j;
-        if (cell === 'Q4' || cell.includes('Q4')) q4Col = j;
-        if (cell.includes('TOTAL') && !cell.includes('%')) totalCol = j;
-        if (cell.includes('%') || cell.includes('PERCENTAGE')) percentCol = j;
-        if (cell.includes('TOTAL KM') || cell.includes('KM')) totalKMCol = j;
+    if (!Array.isArray(row)) continue;
+    for (let j = 0; j < row.length; j++) {
+      const cell = String(row[j] || '').toUpperCase().trim();
+      if (cell === 'STATE' || (cell.includes('STATE') && !cell.includes('UNITED'))) {
+        stateCol = j;
+        if (headerRow < 0) headerRow = i;
       }
+      if (cell === 'Q1') q1Col = j;
+      if (cell === 'Q2') q2Col = j;
+      if (cell === 'Q3') q3Col = j;
+      if (cell === 'Q4') q4Col = j;
+      if (cell === 'TOTAL' && totalCol < 0) totalCol = j;
+      if ((cell.includes('%') && cell.includes('TOTAL')) || cell === '% OF TOTAL') percentCol = j;
     }
   }
-  
-  // If no headers found, create them
-  if (headerRow < 0) {
-    data = [['STATE', 'Q1', 'Q2', 'Q3', 'Q4', 'TOTAL', '% of total', 'Total KM']];
-    headerRow = 0;
-    stateCol = 0;
-    q1Col = 1;
-    q2Col = 2;
-    q3Col = 3;
-    q4Col = 4;
-    totalCol = 5;
-    percentCol = 6;
-    totalKMCol = 7;
+
+  if (headerRow < 0 || stateCol < 0) {
+    data = [
+      [],
+      [],
+      ['', 'STATE', 'ZONE', 'Q1', 'Q2', 'Q3', 'Q4', 'YEAR', 'TOTAL', '% of total']
+    ];
+    headerRow = 2;
+    stateCol = 1;
+    q1Col = 3;
+    q2Col = 4;
+    q3Col = 5;
+    q4Col = 6;
+    totalCol = 8;
+    percentCol = 9;
   }
-  
-  // Get jurisdiction data
+
   const jurisData = reportData.jurisdictionData || { jurisdictions: [], grandTotal: 0 };
-  
-  // Update or add jurisdiction rows
   const quarterMap = { 'Q1': q1Col, 'Q2': q2Col, 'Q3': q3Col, 'Q4': q4Col };
-  
+  const maxCol = Math.max(stateCol, q1Col || 0, q2Col || 0, q3Col || 0, q4Col || 0, totalCol || 0, percentCol || 0);
+
   for (const juris of jurisData.jurisdictions) {
     let found = false;
-    
-    // Look for existing row
     for (let i = headerRow + 1; i < data.length; i++) {
       const row = data[i];
       if (!Array.isArray(row)) continue;
-      
-      while (row.length <= Math.max(stateCol, q1Col, q2Col, q3Col, q4Col, totalCol, percentCol, totalKMCol)) {
-        row.push('');
-      }
-      
-      if (String(row[stateCol] || '').toUpperCase() === juris.code) {
-        // Update existing row
-        juris.quarters.forEach((q, idx) => {
-          if (q && quarterMap[q.quarter] >= 0) {
-            row[quarterMap[q.quarter]] = q.km || '';
-          }
-        });
-        if (totalCol >= 0) row[totalCol] = juris.totalKM || '';
-        if (percentCol >= 0) row[percentCol] = juris.percentage ? (juris.percentage / 100).toFixed(4) : '';
-        if (totalKMCol >= 0) row[totalKMCol] = juris.totalKM || '';
+      while (row.length <= maxCol) row.push('');
+      const stateVal = String(row[stateCol] || '').toUpperCase().trim();
+      if (stateVal === (juris.code || '').toUpperCase()) {
+        if (q1Col >= 0) row[q1Col] = (juris.quarters && juris.quarters[0] && juris.quarters[0].km != null) ? juris.quarters[0].km : '';
+        if (q2Col >= 0) row[q2Col] = (juris.quarters && juris.quarters[1] && juris.quarters[1].km != null) ? juris.quarters[1].km : '';
+        if (q3Col >= 0) row[q3Col] = (juris.quarters && juris.quarters[2] && juris.quarters[2].km != null) ? juris.quarters[2].km : '';
+        if (q4Col >= 0) row[q4Col] = (juris.quarters && juris.quarters[3] && juris.quarters[3].km != null) ? juris.quarters[3].km : '';
+        if (totalCol >= 0) row[totalCol] = juris.totalKM != null ? juris.totalKM : '';
+        if (percentCol >= 0) row[percentCol] = juris.percentage != null ? (Number(juris.percentage) / 100).toFixed(4) : '';
         found = true;
         break;
       }
     }
-    
-    // Add new row if not found
     if (!found) {
-      const newRow = [];
-      while (newRow.length <= Math.max(stateCol, q1Col, q2Col, q3Col, q4Col, totalCol, percentCol, totalKMCol)) {
-        newRow.push('');
-      }
-      
-      newRow[stateCol] = juris.code;
-      juris.quarters.forEach((q, idx) => {
-        if (q && quarterMap[q.quarter] >= 0) {
-          newRow[quarterMap[q.quarter]] = q.km || '';
-        }
-      });
-      if (totalCol >= 0) newRow[totalCol] = juris.totalKM || '';
-      if (percentCol >= 0) newRow[percentCol] = juris.percentage ? (juris.percentage / 100).toFixed(4) : '';
-      if (totalKMCol >= 0) newRow[totalKMCol] = juris.totalKM || '';
-      
+      const newRow = Array(maxCol + 1).fill('');
+      newRow[stateCol] = juris.code || '';
+      if (q1Col >= 0) newRow[q1Col] = (juris.quarters && juris.quarters[0] && juris.quarters[0].km != null) ? juris.quarters[0].km : '';
+      if (q2Col >= 0) newRow[q2Col] = (juris.quarters && juris.quarters[1] && juris.quarters[1].km != null) ? juris.quarters[1].km : '';
+      if (q3Col >= 0) newRow[q3Col] = (juris.quarters && juris.quarters[2] && juris.quarters[2].km != null) ? juris.quarters[2].km : '';
+      if (q4Col >= 0) newRow[q4Col] = (juris.quarters && juris.quarters[3] && juris.quarters[3].km != null) ? juris.quarters[3].km : '';
+      if (totalCol >= 0) newRow[totalCol] = juris.totalKM != null ? juris.totalKM : '';
+      if (percentCol >= 0) newRow[percentCol] = juris.percentage != null ? (Number(juris.percentage) / 100).toFixed(4) : '';
       data.push(newRow);
     }
   }
-  
-  // Update worksheet
+
   worksheet = XLSX.utils.aoa_to_sheet(data);
   workbook.Sheets[sheetName] = worksheet;
-  
   return workbook;
 };
 

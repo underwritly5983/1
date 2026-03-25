@@ -1,8 +1,19 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { FileText } from 'lucide-react'
+
+function safeReturnPath(raw) {
+  if (!raw || typeof raw !== 'string') return '/reports'
+  try {
+    const u = decodeURIComponent(raw.trim())
+    if (!u.startsWith('/') || u.startsWith('//')) return '/reports'
+    return u
+  } catch {
+    return '/reports'
+  }
+}
 
 const Login = () => {
   const [email, setEmail] = useState('')
@@ -10,6 +21,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -18,7 +30,8 @@ const Login = () => {
     try {
       await login(email, password)
       toast.success('Welcome back!')
-      navigate('/dashboard')
+      const next = safeReturnPath(searchParams.get('returnTo'))
+      navigate(next, { replace: true })
     } catch (error) {
       toast.error(error.response?.data?.error || 'Login failed')
     } finally {
@@ -34,7 +47,7 @@ const Login = () => {
             <FileText className="h-8 w-8 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900">Sign in to IFTA Pro</h2>
-          <p className="mt-2 text-gray-600">Access your dashboard and reports</p>
+          <p className="mt-2 text-gray-600">Authorized users only</p>
         </div>
 
         <div className="card">
@@ -65,7 +78,7 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
-                placeholder="••••••••"
+                placeholder="��������"
               />
             </div>
 
@@ -77,15 +90,6 @@ const Login = () => {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-                Sign up for free
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
     </div>

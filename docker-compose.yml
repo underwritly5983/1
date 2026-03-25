@@ -29,7 +29,7 @@ services:
       PORT: 5000
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:3001
     ports:
       - "5000:5000"
     volumes:
@@ -49,7 +49,7 @@ services:
       VITE_API_URL: http://localhost:5000/api
       DOCKER: "true"
     ports:
-      - "3000:3000"
+      - "3001:3001"
     volumes:
       - ./client:/app
       - /app/node_modules

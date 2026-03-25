@@ -1,18 +1,66 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { FileText, Download, Trash2, Eye } from 'lucide-react'
-import { format } from 'date-fns'
+import { FileText } from 'lucide-react'
+import JurisdictionReportLoader from '../components/JurisdictionReportLoader'
+import SourceUploadFileRow from '../components/SourceUploadFileRow'
+import { getSiteOrigin } from '../lib/apiBase'
 
 const GeneratedReports = () => {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedReport, setSelectedReport] = useState(null)
+  const [selectedReportId, setSelectedReportId] = useState(null)
+  const [selectedPdfIds, setSelectedPdfIds] = useState(new Set())
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0)
+  const apiOrigin = getSiteOrigin()
+
+  const selectedReport = useMemo(
+    () => reports.find((r) => r.id === selectedReportId) || null,
+    [reports, selectedReportId]
+  )
 
   useEffect(() => {
     fetchReports()
   }, [])
+
+  useEffect(() => {
+    setSelectedPdfIds(new Set())
+  }, [selectedReportId])
+
+  useEffect(() => {
+    if (reports.length === 0) {
+      setSelectedReportId(null)
+      return
+    }
+    if (selectedReportId != null && reports.some((r) => r.id === selectedReportId)) {
+      return
+    }
+    setSelectedReportId(reports[0].id)
+  }, [reports, selectedReportId])
+
+  useEffect(() => {
+    if (!selectedReport) return
+    let reportData = selectedReport.report_data
+    if (typeof reportData === 'string') {
+      try {
+        reportData = JSON.parse(reportData)
+      } catch {
+        reportData = {}
+      }
+    }
+    const displayName = String(
+      (reportData && (reportData.insuredName || reportData.companyName)) || ''
+    ).trim()
+    if (!displayName) return
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('ifta_display_name', displayName)
+      }
+      window.dispatchEvent(new Event('ifta-display-name-updated'))
+    } catch {
+      // Ignore storage errors
+    }
+  }, [selectedReport])
 
   const fetchReports = async () => {
     try {
@@ -25,36 +73,56 @@ const GeneratedReports = () => {
     }
   }
 
-  const handleView = async (id) => {
-    try {
-      const response = await axios.get(`/reports/generated/${id}`)
-      const report = response.data.report
-      // Parse report_data if it's a string
-      if (typeof report.report_data === 'string') {
-        report.report_data = JSON.parse(report.report_data)
-      }
-      setSelectedReport(report)
-    } catch (error) {
-      toast.error('Failed to fetch report details')
+  const handleSourceUploadChanged = () => {
+    fetchReports()
+    setDetailRefreshKey((k) => k + 1)
+  }
+
+  const togglePdfSelect = (id) => {
+    if (id == null) return
+    setSelectedPdfIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectablePdfIds = useMemo(() => {
+    const files = selectedReport?.sourceFiles || []
+    return files.map((f) => f.id).filter((id) => id != null)
+  }, [selectedReport])
+
+  const allPdfsSelected =
+    selectablePdfIds.length > 0 && selectablePdfIds.every((id) => selectedPdfIds.has(id))
+
+  const toggleSelectAllPdfs = () => {
+    if (allPdfsSelected) {
+      setSelectedPdfIds(new Set())
+    } else {
+      setSelectedPdfIds(new Set(selectablePdfIds))
     }
   }
 
-  const handleDelete = async (id, e) => {
-    e?.stopPropagation() // Prevent triggering the view action
-    if (!window.confirm('Are you sure you want to delete this report? This action cannot be undone.')) return
-
+  const handleDeleteSelectedPdfs = async () => {
+    if (selectedPdfIds.size === 0) return
+    if (
+      !window.confirm(
+        `Delete ${selectedPdfIds.size} selected PDF${selectedPdfIds.size > 1 ? 's' : ''} from your account? Summaries that used them will no longer link to these files.`
+      )
+    ) {
+      return
+    }
     try {
-      const response = await axios.delete(`/reports/generated/${id}`)
-      toast.success('Report deleted successfully')
-      fetchReports()
-      if (selectedReport?.id === id) {
-        setSelectedReport(null)
-      }
+      await axios.delete('/reports', {
+        data: { ids: Array.from(selectedPdfIds).map(Number) }
+      })
+      toast.success(`${selectedPdfIds.size} file${selectedPdfIds.size > 1 ? 's' : ''} deleted`)
+      setSelectedPdfIds(new Set())
+      handleSourceUploadChanged()
     } catch (error) {
-      console.error('Delete error:', error)
-      console.error('Error response:', error.response)
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to delete report'
-      toast.error(errorMessage)
+      const msg = error.response?.data?.error || error.message || 'Failed to delete files'
+      toast.error(msg)
     }
   }
 
@@ -67,230 +135,110 @@ const GeneratedReports = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Generated Reports</h1>
-        <p className="text-gray-600 mt-1">View and manage your summary reports</p>
+    <div className="space-y-8 max-w-[1600px] mx-auto w-full min-w-0 pb-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">IFTA summary</h1>
+          <p className="text-gray-600 mt-1">
+            Your combined summary opens below. Source <strong className="font-semibold text-gray-800">Notice of Assessment</strong>{' '}
+            PDFs and the full jurisdiction breakdown are on this page.
+          </p>
+        </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Reports</h2>
-            {reports.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                <p>No generated reports yet</p>
+      {selectedReportId && selectedReport && (
+        <section className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8 items-start">
+          <section className="min-w-0 max-w-full xl:col-span-8" aria-label="Jurisdiction summary details">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 lg:p-6 min-w-0 max-w-full">
+              <JurisdictionReportLoader
+                key={`${selectedReportId}-${detailRefreshKey}`}
+                reportId={selectedReportId}
+                embedded
+                hideSourceFiles
+                onReportRenamed={fetchReports}
+                onReportDeleted={() => {
+                  setSelectedReportId(null)
+                  fetchReports()
+                }}
+              />
+            </div>
+          </section>
+
+          <section className="card min-w-0 border-primary-100 bg-primary-50/30 xl:col-span-4 sticky top-20" aria-labelledby="source-pdfs-heading">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+              <div>
+                <h2 id="source-pdfs-heading" className="text-lg font-semibold text-gray-900">
+                  Notice of Assessment PDFs used for this summary
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  <span className="font-medium text-gray-800">{selectedReport.report_name}</span>
+                  {' · '}
+                  These are the files from <strong className="font-medium text-gray-800">Upload Notice of Assessment</strong> that
+                  were used to generate this report. View, rename, delete, or select multiple to remove at once.
+                </p>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {reports.map((report) => (
-                  <div
-                    key={report.id}
-                    className={`p-4 rounded-lg transition-colors ${
-                      selectedReport?.id === report.id
-                        ? 'bg-primary-50 border-2 border-primary-500'
-                        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-                    }`}
+              {selectablePdfIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllPdfs}
+                    className="text-sm font-medium text-primary-700 hover:underline"
                   >
-                    <div className="flex items-start justify-between">
-                      <div 
-                        className="flex-1 cursor-pointer"
-                        onClick={() => handleView(report.id)}
-                      >
-                        <p className="font-medium text-gray-900">{report.report_name}</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {format(new Date(report.created_at), 'MMM d, yyyy')}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Link
-                          to={`/reports/jurisdiction/${report.id}`}
-                          className="text-primary-600 hover:text-primary-700"
-                          title="View Jurisdiction Report"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Link>
-                        <button
-                          onClick={(e) => handleDelete(report.id, e)}
-                          className="text-red-600 hover:text-red-700"
-                          title="Delete report"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-2">
-          {selectedReport ? (
-            <div className="card">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{selectedReport.report_name}</h2>
-                  <p className="text-gray-600 mt-1">
-                    Generated on {format(new Date(selectedReport.created_at), 'MMMM d, yyyy')}
-                  </p>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <Link
-                    to={`/reports/jurisdiction/${selectedReport.id}`}
-                    className="btn-primary inline-flex items-center"
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    View Jurisdiction Report
-                  </Link>
-                </div>
-              </div>
-
-              {selectedReport.report_data && (
-                <div className="space-y-6">
-                  {/* Summary */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Summary</h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-gray-700">{selectedReport.report_data.summary || 'No summary available'}</p>
-                    </div>
-                  </div>
-
-                  {/* Totals */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Totals</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div className="bg-primary-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">Total KM</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {selectedReport.report_data.jurisdictionData?.grandTotal?.toLocaleString() || 
-                           selectedReport.report_data.totals?.totalMiles?.toLocaleString() || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-primary-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">Total Miles</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {selectedReport.report_data.totals?.totalMiles?.toLocaleString() || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-primary-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">Fuel Purchased</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {selectedReport.report_data.totals?.totalFuelPurchased?.toLocaleString() || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-primary-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">Fuel Consumed</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">
-                          {selectedReport.report_data.totals?.totalFuelConsumed?.toLocaleString() || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="bg-primary-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-600">Tax Owed</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">
-                          ${selectedReport.report_data.totals?.totalTaxOwed?.toLocaleString() || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Jurisdiction Breakdown */}
-                  {selectedReport.report_data.jurisdictionData && selectedReport.report_data.jurisdictionData.jurisdictions && selectedReport.report_data.jurisdictionData.jurisdictions.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Jurisdiction Breakdown</h3>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jurisdiction</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q1</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q2</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q3</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Q4</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total KM</th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% of Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {selectedReport.report_data.jurisdictionData.jurisdictions.map((juris, index) => (
-                              <tr key={index} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {juris.code}
-                                </td>
-                                {juris.quarters.map((q, qIdx) => (
-                                  <td key={qIdx} className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
-                                    {q ? q.km.toLocaleString() : '-'}
-                                  </td>
-                                ))}
-                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
-                                  {juris.totalKM.toLocaleString()}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium text-primary-600">
-                                  {juris.percentage.toFixed(2)}%
-                                </td>
-                              </tr>
-                            ))}
-                            <tr className="bg-primary-50 font-semibold">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">Grand Total</td>
-                              <td colSpan="4" className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900"></td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
-                                {selectedReport.report_data.jurisdictionData.grandTotal.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">100.00%</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quarters */}
-                  {selectedReport.report_data.quarters && selectedReport.report_data.quarters.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Quarters</h3>
-                      <div className="space-y-4">
-                        {selectedReport.report_data.quarters.map((quarter, index) => (
-                          <div key={index} className="border border-gray-200 rounded-lg p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <h4 className="font-semibold text-gray-900">
-                                {quarter.quarter} {quarter.year}
-                              </h4>
-                              <span className="text-sm text-gray-500">{quarter.fileName}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-3">{quarter.summary}</p>
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <span className="text-gray-600">Miles:</span>
-                                <span className="ml-2 font-medium">{quarter.totalMiles?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Fuel Purchased:</span>
-                                <span className="ml-2 font-medium">{quarter.totalFuelPurchased?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Fuel Consumed:</span>
-                                <span className="ml-2 font-medium">{quarter.totalFuelConsumed?.toLocaleString() || 'N/A'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    {allPdfsSelected ? 'Clear selection' : 'Select all'}
+                  </button>
+                  {selectedPdfIds.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteSelectedPdfs}
+                      className="text-sm font-medium text-red-600 hover:text-red-800"
+                    >
+                      Delete {selectedPdfIds.size} selected PDF{selectedPdfIds.size > 1 ? 's' : ''}
+                    </button>
                   )}
                 </div>
               )}
             </div>
-          ) : (
-            <div className="card text-center py-12">
-              <Eye className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a report to view</h3>
-              <p className="text-gray-600">Choose a report from the list to see its details</p>
-            </div>
-          )}
+
+            {selectedReport.sourceFiles?.length > 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-white px-2 sm:px-3">
+                {selectedReport.sourceFiles.map((f, idx) => (
+                  <SourceUploadFileRow
+                    key={f.id != null ? `src-${f.id}` : `src-${selectedReport.id}-${idx}`}
+                    file={f}
+                    apiOrigin={apiOrigin}
+                    selectable
+                    selected={f.id != null && selectedPdfIds.has(f.id)}
+                    onToggleSelect={togglePdfSelect}
+                    onChanged={handleSourceUploadChanged}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 py-4">
+                No Notice of Assessment uploads are linked to this summary. Older summaries may not store file links; generate a
+                new report from <strong className="font-medium text-gray-700">Upload Notice of Assessment</strong> to attach PDFs
+                here.
+              </p>
+            )}
+          </section>
+        </section>
+      )}
+
+      {!selectedReportId && reports.length > 0 && (
+        <div className="card text-center py-12 text-gray-600">
+          <FileText className="h-14 w-14 mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-900">Loading summary…</p>
+          <p className="text-sm mt-1">Please wait a moment.</p>
         </div>
-      </div>
+      )}
+
+      {!selectedReportId && reports.length === 0 && (
+        <div className="card text-center py-12 text-gray-600">
+          <FileText className="h-14 w-14 mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-900">No generated reports yet</p>
+          <p className="text-sm mt-1">Upload your Notice of Assessment PDFs to build a summary.</p>
+        </div>
+      )}
     </div>
   )
 }

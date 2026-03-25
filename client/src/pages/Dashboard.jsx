@@ -164,7 +164,7 @@ const Dashboard = () => {
             >
               <div className="flex items-center">
                 <FileText className="h-5 w-5 text-gray-600 mr-3" />
-                <span className="font-medium text-gray-900">View All Reports</span>
+                <span className="font-medium text-gray-900">IFTA summary</span>
               </div>
               <ArrowRight className="h-5 w-5 text-gray-400" />
             </Link>
@@ -186,7 +186,7 @@ const Dashboard = () => {
               {stats.recentReports.map((report) => (
                 <Link
                   key={report.id}
-                  to={`/reports/${report.id}`}
+                  to="/reports/uploads"
                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <div>

@@ -21,7 +21,7 @@ router.get('/dashboard', async (req, res) => {
     );
     const premiumUsers = parseInt(premiumResult.rows[0].count);
 
-    // Total reports
+    // Total reports (IFTA)
     const reportsResult = await db.query('SELECT COUNT(*) as count FROM ifta_reports');
     const totalReports = parseInt(reportsResult.rows[0].count);
 

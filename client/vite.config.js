@@ -5,13 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0', // Allow external connections in Docker
-    port: 3000,
+    port: 3001,
     watch: {
       usePolling: true, // Enable polling for Docker volume mounts
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // Browser connects to localhost, which maps to host
+        target: 'http://localhost:5000', // API server (IFTA backend)
         changeOrigin: true
       }
     }

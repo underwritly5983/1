@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { getSiteOrigin } from '../lib/apiBase'
 import toast from 'react-hot-toast'
 import { User, Upload, Save, Lock } from 'lucide-react'
 
@@ -65,9 +66,7 @@ const Profile = () => {
         data.append('logo', logo)
       }
 
-      const response = await axios.put('/users/profile', data, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      const response = await axios.put('/users/profile', data)
 
       updateUser(response.data.user)
       await fetchUser()
@@ -165,7 +164,7 @@ const Profile = () => {
             {user.logoUrl && !logo && (
               <div className="mb-4">
                 <img
-                  src={`http://localhost:5000${user.logoUrl}`}
+                  src={`${getSiteOrigin()}${user.logoUrl}`}
                   alt="Current logo"
                   className="h-24 w-24 object-contain border border-gray-200 rounded-lg"
                 />

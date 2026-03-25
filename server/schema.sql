@@ -101,15 +101,19 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Apply triggers
+-- Apply triggers (idempotent: drop if exists then create)
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_ifta_reports_updated_at ON ifta_reports;
 CREATE TRIGGER update_ifta_reports_updated_at BEFORE UPDATE ON ifta_reports
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_generated_reports_updated_at ON generated_reports;
 CREATE TRIGGER update_generated_reports_updated_at BEFORE UPDATE ON generated_reports
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
 CREATE TRIGGER update_subscriptions_updated_at BEFORE UPDATE ON subscriptions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -17,6 +17,16 @@ uploads/
 uploads/**/*
 !uploads/.gitkeep
 
+# Cursor (local)
+.cursor/
+
+# Local test PDFs / scratch output at repo root
+2131.pdf
+5151.pdf
+654654.pdf
+852.pdf
+test-output.pdf
+
 # IDE
 .vscode/
 .idea/
@@ -53,3 +63,5 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.vercel
+.env*.local

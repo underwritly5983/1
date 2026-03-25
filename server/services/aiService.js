@@ -1,11 +1,20 @@
 const OpenAI = require('openai');
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Lazy-initialize so server can start without OPENAI_API_KEY (required only when summarizing)
+let _openai = null;
+function getOpenAI() {
+  if (_openai) return _openai;
+  const key = process.env.OPENAI_API_KEY;
+  if (!key || key.trim() === '') {
+    throw new Error('OPENAI_API_KEY is not set. Add it to your .env file to use report summarization.');
+  }
+  _openai = new OpenAI({ apiKey: key });
+  return _openai;
+}
 
 const summarizeIFTAReport = async (text, quarter, year) => {
   try {
+    const openai = getOpenAI();
     const prompt = `You are an expert at analyzing IFTA (International Fuel Tax Agreement) reports for commercial transportation insurance brokers.
 
 Analyze the following IFTA report and provide a comprehensive summary in JSON format. The report is for ${quarter} ${year}.

@@ -17,6 +17,7 @@ OPENAI_API_KEY=your-openai-api-key-here
 New-Item -ItemType Directory -Force -Path "uploads\logos" | Out-Null
 New-Item -ItemType Directory -Force -Path "uploads\reports" | Out-Null
 
-# Start services
+# Start services (run from project root)
 Write-Host "📦 Starting Docker containers..." -ForegroundColor Cyan
-docker-compose -f docker-compose.dev.yml up --build
+Set-Location $PSScriptRoot
+docker compose -f docker-compose.dev.yml up --build

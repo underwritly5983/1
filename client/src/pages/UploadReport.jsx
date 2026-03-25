@@ -4,12 +4,12 @@ import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { getApiBaseUrl } from '../lib/apiBase'
 
 const UploadReport = () => {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [uploadResults, setUploadResults] = useState([])
-  const [autoGenerate, setAutoGenerate] = useState(true)
   const navigate = useNavigate()
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -29,63 +29,85 @@ const UploadReport = () => {
     if (files.length === 0) return
 
     setUploading(true)
+    const uploadStartedAt = Date.now()
     const formData = new FormData()
-    
-    // Add all files
     files.forEach((file) => {
       formData.append('files', file)
     })
-    formData.append('autoGenerate', autoGenerate)
+    // Build combined IFTA summary + link source PDFs; next screen shows full report + Notice of Assessment files
+    formData.append('autoGenerate', 'true')
 
     try {
-      const response = await axios.post('/reports/upload-multiple', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          // Could show progress here
-        }
+      // Use fetch() for multipart so the browser sets boundary (axios can merge bad Content-Type).
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null
+      const url = `${getApiBaseUrl().replace(/\/$/, '')}/reports/upload-multiple`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
       })
-
-      setUploadResults(response.data.results || [])
-      
-      const hasWarnings = response.data.results?.some(r => r.warning)
-      const allSuccess = response.data.results?.every(r => r.report)
-      
-      if (hasWarnings) {
-        toast.error('Some reports have warnings. Please review.', { duration: 6000 })
-      } else if (allSuccess) {
-        toast.success(`${files.length} report(s) uploaded successfully! Processing...`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = data.error || data.message || `Upload failed (${res.status})`
+        throw Object.assign(new Error(msg), { response: { status: res.status, data } })
       }
 
-      // If auto-generate is enabled and we have a generated report, navigate to it
-      if (response.data.generatedReportId) {
-        toast.success('Summary report generated!', { duration: 5000 })
-        // Redirect to the generated report view
-        setTimeout(() => {
-          navigate(`/reports/jurisdiction/${response.data.generatedReportId}`)
-        }, 2000)
-      } else if (response.data.summaryPdfUrl) {
-        toast.success('Summary PDF generated!', { duration: 5000 })
-        // Auto-download the summary PDF if no report ID
-        setTimeout(() => {
-          window.open(response.data.summaryPdfUrl, '_blank')
-        }, 2000)
-        // Redirect to generated reports page
-        setTimeout(() => {
-          navigate('/reports/generated')
-        }, 3000)
+      setUploadResults(data.results || [])
+      const allSuccess = data.results?.every(r => r.report)
+      if (allSuccess) {
+        toast.success(`${files.length} IFTA report(s) uploaded. Building your summary…`)
+      }
+      if (data.showQuarterAgeWarning) {
+        toast.error('The most recent IFTA quarter in your upload is over 6 months old. Please verify the data is current.', { duration: 8000 })
+      }
+
+      const goToSummary = (id) => {
+        navigate(`/reports/jurisdiction/${id}`, { replace: true })
+      }
+
+      if (data.generatedReportId) {
+        toast.success('Opening your summary…')
+        goToSummary(data.generatedReportId)
       } else {
-        // Always redirect to generated reports page, not individual reports
-        toast.success('Reports uploaded! Processing summaries...', { duration: 4000 })
-        setTimeout(() => {
-          navigate('/reports/generated')
-        }, 2000)
+        // Generation can finish a moment after upload; poll for a report created after this upload
+        toast.success('Finalizing your summary…')
+        let foundId = null
+        for (let attempt = 0; attempt < 30 && !foundId; attempt++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          try {
+            const listRes = await axios.get('/reports/generated/list')
+            const list = listRes.data.reports || []
+            const first = list[0]
+            if (
+              first?.created_at &&
+              new Date(first.created_at).getTime() >= uploadStartedAt - 10_000
+            ) {
+              foundId = first.id
+            }
+          } catch {
+            break
+          }
+        }
+        if (foundId) {
+          goToSummary(foundId)
+        } else if (data.summaryPdfUrl) {
+          window.open(data.summaryPdfUrl, '_blank')
+          toast.error('Summary PDF opened in a new tab. Try View Report in the menu for the full page.')
+        } else {
+          toast.error('Summary is still preparing. Use View Report in a minute.')
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Upload failed';
+      const d = error.response?.data;
+      const errorMessage =
+        (typeof d === 'object' && d && d.error) ||
+        (typeof d === 'object' && d && d.details) ||
+        error.message ||
+        'Upload failed';
       toast.error(errorMessage, { duration: 8000 });
-      if (error.response?.data?.details) {
-        console.error('Error details:', error.response.data.details);
+      if (typeof d === 'object' && d && d.details) {
+        console.error('Error details:', d.details);
       }
     } finally {
       setUploading(false)
@@ -100,8 +122,11 @@ const UploadReport = () => {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Upload IFTA Report</h1>
-        <p className="text-gray-600 mt-1">Upload a PDF IFTA report for processing and summarization</p>
+        <h1 className="text-3xl font-bold text-gray-900">Upload your IFTA reports</h1>
+        <p className="text-gray-600 mt-1">
+          Upload up to four quarterly PDFs (Notice of Assessment). You will be taken to one page with your combined summary,
+          charts, and the source files you uploaded—no extra steps.
+        </p>
       </div>
 
       <div className="card">
@@ -163,18 +188,6 @@ const UploadReport = () => {
 
         {files.length > 0 && (
           <div className="mt-6 space-y-4">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="autoGenerate"
-                checked={autoGenerate}
-                onChange={(e) => setAutoGenerate(e.target.checked)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <label htmlFor="autoGenerate" className="ml-2 text-sm text-gray-700">
-                Automatically generate summary PDF after upload
-              </label>
-            </div>
             <button
               onClick={handleUpload}
               disabled={uploading}
@@ -188,25 +201,19 @@ const UploadReport = () => {
         {uploadResults.length > 0 && (
           <div className="mt-6 space-y-3">
             {uploadResults.map((result, index) => (
-              <div key={index} className={`p-4 rounded-lg ${
-                result.warning ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'
-              }`}>
+              <div key={index} className={`p-4 rounded-lg ${result.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
                 <div className="flex items-start">
-                  {result.warning ? (
-                    <AlertCircle className="h-5 w-5 text-amber-600 mr-3 mt-0.5" />
+                  {result.error ? (
+                    <AlertCircle className="h-5 w-5 text-red-600 mr-3 mt-0.5" />
                   ) : (
                     <CheckCircle className="h-5 w-5 text-green-600 mr-3 mt-0.5" />
                   )}
                   <div className="flex-1">
-                    <p className={`font-medium ${
-                      result.warning ? 'text-amber-900' : 'text-green-900'
-                    }`}>
+                    <p className={`font-medium ${result.error ? 'text-red-900' : 'text-green-900'}`}>
                       {result.fileName || `File ${index + 1}`}
                     </p>
-                    <p className={`text-sm mt-1 ${
-                      result.warning ? 'text-amber-700' : 'text-green-700'
-                    }`}>
-                      {result.warning || 'Uploaded successfully'}
+                    <p className={`text-sm mt-1 ${result.error ? 'text-red-700' : 'text-green-700'}`}>
+                      {result.error || 'Uploaded successfully'}
                     </p>
                     {result.report && (
                       <div className="mt-2 text-sm text-gray-600">
@@ -220,23 +227,6 @@ const UploadReport = () => {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="card bg-blue-50 border-blue-200">
-        <div className="flex items-start">
-          <AlertCircle className="h-5 w-5 text-blue-600 mr-3 mt-0.5" />
-          <div>
-            <h3 className="font-medium text-blue-900 mb-1">How it works</h3>
-            <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-              <li>Upload up to 4 IFTA report PDFs at once (one per quarter)</li>
-              <li>Quarter information is automatically detected from each document</li>
-              <li>Our AI extracts and summarizes key data from all documents</li>
-              <li>Reports are organized chronologically (Q1, Q2, Q3, Q4)</li>
-              <li>Optionally auto-generate a summary PDF with all quarters combined</li>
-              <li>You'll receive a notification if any report is older than 6 months</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   )

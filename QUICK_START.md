@@ -17,19 +17,31 @@ OPENAI_API_KEY=sk-your-openai-api-key
 
 ### Step 2: Start Docker
 
-**Windows:**
+**Easiest (Windows):** Double-click `start-docker.ps1` or run in PowerShell:
 ```powershell
-docker-compose -f docker-compose.dev.yml up --build
+.\start-docker.ps1
 ```
+
+**Or run manually:**
+```powershell
+# Windows (from project folder)
+docker compose -f docker-compose.dev.yml up --build
+```
+If you get "compose is not a docker command", use: `docker-compose -f docker-compose.dev.yml up --build`
 
 **Mac/Linux:**
 ```bash
-docker-compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-### Step 3: Open Browser
+Wait until you see **VITE ready** and **Server running on port 5000**, then:
 
-Navigate to: **http://localhost:3000**
+### Step 3: Access the project
+
+Open in your browser: **http://localhost:3000**
+
+- **App (frontend):** http://localhost:3000  
+- **API (backend):** http://localhost:5000/api/health
 
 ---
 

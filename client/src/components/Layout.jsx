@@ -1,161 +1,101 @@
+import { useEffect, useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useNotifications } from '../contexts/NotificationContext'
-import { 
-  LayoutDashboard, FileText, Upload, Settings, 
-  Bell, LogOut, User, BarChart3, Crown
-} from 'lucide-react'
-import { useState } from 'react'
+import { FileText, Upload, LogOut, User, BarChart3 } from 'lucide-react'
 
 const Layout = () => {
   const { user, logout } = useAuth()
-  const { unreadCount, notifications, markAsRead, markAllAsRead } = useNotifications()
   const location = useLocation()
-  const [showNotifications, setShowNotifications] = useState(false)
+  const [reportDisplayName, setReportDisplayName] = useState('')
 
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Reports', href: '/reports', icon: FileText },
-    { name: 'Upload', href: '/reports/upload', icon: Upload },
-    { name: 'Profile', href: '/profile', icon: Settings },
-  ]
+  useEffect(() => {
+    const load = () => {
+      try {
+        if (typeof localStorage === 'undefined') return
+        const v = String(localStorage.getItem('ifta_display_name') || '').trim()
+        setReportDisplayName(v)
+      } catch {
+        // Ignore storage errors (incognito / blocked cookies)
+      }
+    }
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('ifta-display-name-updated', load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('ifta-display-name-updated', load)
+    }
+  }, [])
 
-  if (user?.isAdmin) {
-    navigation.push({ name: 'Admin', href: '/admin', icon: BarChart3 })
-  }
+  const topRightName = reportDisplayName || user?.companyName || user?.email || 'User'
 
-  const isActive = (path) => location.pathname === path
+  const isUpload = location.pathname.startsWith('/reports/upload')
+  const isViewReport =
+    location.pathname === '/reports' ||
+    location.pathname === '/reports/generated' ||
+    location.pathname.startsWith('/reports/jurisdiction') ||
+    location.pathname.startsWith('/reports/latest')
+
+  const navClass = (active) =>
+    `inline-flex items-center px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+      active ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'
+    }`
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navbar */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <Link to="/dashboard" className="flex items-center">
-                <div className="flex-shrink-0 flex items-center">
-                  <div className="h-8 w-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-lg flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-white" />
-                  </div>
-                  <span className="ml-3 text-xl font-bold text-gray-900">IFTA Pro</span>
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-[min(100%,1600px)] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-14">
+          <div className="flex justify-between items-center h-14">
+            <div className="flex items-center gap-6">
+              <Link to="/reports" className="flex items-center gap-2 shrink-0" title="IFTA summary">
+                <div className="h-8 w-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-lg flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-white" />
                 </div>
+                <span className="text-lg font-bold text-gray-900 hidden sm:inline">IFTA Pro</span>
               </Link>
-              <div className="hidden sm:ml-8 sm:flex sm:space-x-1">
-                {navigation.map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        isActive(item.href)
-                          ? 'bg-primary-50 text-primary-700'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {item.name}
-                    </Link>
-                  )
-                })}
+              <div className="flex items-center gap-2">
+                <Link to="/reports/upload" className={navClass(isUpload)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload New IFTAs
+                </Link>
+                <Link to="/reports/latest" className={navClass(isViewReport)}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Report
+                </Link>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              {user?.subscriptionTier === 'premium' && (
-                <span className="flex items-center text-sm text-amber-600">
-                  <Crown className="h-4 w-4 mr-1" />
-                  Premium
-                </span>
+            <div className="flex items-center gap-2">
+              {user?.isAdmin && (
+                <Link
+                  to="/admin"
+                  className="hidden sm:inline-flex items-center px-2 py-1.5 text-xs font-medium text-gray-600 hover:text-primary-700 rounded-md"
+                >
+                  <BarChart3 className="h-3.5 w-3.5 mr-1" />
+                  Admin
+                </Link>
               )}
-              
-              {/* Notifications */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-                >
-                  <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-                
-                {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="font-semibold text-gray-900">Notifications</h3>
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={markAllAsRead}
-                          className="text-sm text-primary-600 hover:text-primary-700"
-                        >
-                          Mark all read
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500">No notifications</div>
-                      ) : (
-                        notifications.slice(0, 10).map((notification) => (
-                          <div
-                            key={notification.id}
-                            onClick={() => {
-                              markAsRead(notification.id)
-                              if (notification.actionUrl) {
-                                window.location.href = notification.actionUrl
-                              }
-                            }}
-                            className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                              !notification.read ? 'bg-primary-50' : ''
-                            }`}
-                          >
-                            <div className="font-medium text-sm text-gray-900">
-                              {notification.title}
-                            </div>
-                            <div className="text-sm text-gray-600 mt-1">
-                              {notification.message}
-                            </div>
-                            <div className="text-xs text-gray-400 mt-2">
-                              {new Date(notification.createdAt).toLocaleString()}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* User menu */}
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  <div className="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-primary-600" />
-                  </div>
-                  <div className="hidden md:block text-left">
-                    <div className="text-sm font-medium text-gray-900">{user?.companyName}</div>
-                    <div className="text-xs text-gray-500">{user?.email}</div>
-                  </div>
+              <div className="hidden sm:flex items-center gap-1.5 text-right max-w-[10rem] lg:max-w-xs">
+                <div className="h-7 w-7 bg-primary-100 rounded-full flex items-center justify-center shrink-0">
+                  <User className="h-3.5 w-3.5 text-primary-600" />
                 </div>
-                <button
-                  onClick={logout}
-                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-                  title="Logout"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
+                <span className="text-xs text-gray-600 truncate" title={topRightName}>
+                  {topRightName}
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                title="Sign out"
+              >
+                <LogOut className="h-5 w-5" />
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[min(100%,1600px)] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-14 py-8 md:py-10">
         <Outlet />
       </main>
     </div>

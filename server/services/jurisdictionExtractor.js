@@ -58,34 +58,33 @@ const extractJurisdictionData = (text) => {
   return jurisdictions;
 };
 
+const { parseIftaSummaryJson } = require('../lib/parseIftaSummary');
+
 // Extract jurisdiction data from all reports and organize by jurisdiction
 const organizeByJurisdiction = (reports) => {
   const { calculateCANvsUS } = require('./jurisdictionClassifier');
   const jurisdictionMap = new Map();
-  const quarterMap = {
-    'Q1': 0,
-    'Q2': 1,
-    'Q3': 2,
-    'Q4': 3
-  };
-  
-  // Process each report
-  reports.forEach((report) => {
-    const summary = typeof report.summary === 'string' 
-      ? JSON.parse(report.summary) 
-      : report.summary;
-    
+  const numPeriods = Math.max(reports.length, 1);
+
+  // One column per uploaded report in chronological order (same order as reportData.quarters).
+  // Do not map by Q1–Q4 slot: e.g. Q4 2024 + Q1–Q3 2025 must occupy four columns, not three Q1–Q3 + empty Q4.
+  reports.forEach((report, periodIndex) => {
+    const summary = parseIftaSummaryJson(report.summary);
+
     const quarter = report.quarter;
     const year = report.year;
-    const quarterIndex = quarterMap[quarter] || 0;
     
-    // Extract jurisdiction data from raw text if available
+    // Prefer Diesel-row parsing from the PDF; if it finds nothing, use AI jurisdictions.
     let jurisdictions = [];
     if (report.rawText) {
       jurisdictions = extractJurisdictionData(report.rawText);
-    } else if (summary.jurisdictions && Array.isArray(summary.jurisdictions)) {
-      // Use AI-extracted jurisdiction data
-      jurisdictions = summary.jurisdictions.map(j => ({
+    }
+    if (
+      jurisdictions.length === 0 &&
+      summary.jurisdictions &&
+      Array.isArray(summary.jurisdictions)
+    ) {
+      jurisdictions = summary.jurisdictions.map((j) => ({
         code: j.name || j.code || '',
         txblKM: j.miles || j.txblKM || 0,
         totalKM: j.miles || j.totalKM || 0
@@ -99,14 +98,13 @@ const organizeByJurisdiction = (reports) => {
       if (!jurisdictionMap.has(j.code)) {
         jurisdictionMap.set(j.code, {
           code: j.code,
-          quarters: [null, null, null, null],
+          quarters: Array(numPeriods).fill(null),
           totalKM: 0
         });
       }
-      
+
       const jurisData = jurisdictionMap.get(j.code);
-      // Use Total KM per jurisdiction per quarter (matches user's IFTA SUMMARY.xlsx expectation)
-      jurisData.quarters[quarterIndex] = {
+      jurisData.quarters[periodIndex] = {
         quarter: quarter,
         year: year,
         km: j.totalKM || 0
@@ -141,7 +139,8 @@ const organizeByJurisdiction = (reports) => {
   return {
     jurisdictions: allJurisdictions,
     grandTotal: grandTotal,
-    quarters: ['Q1', 'Q2', 'Q3', 'Q4'],
+    quarters: reports.map((r) => ({ quarter: r.quarter, year: r.year })),
+    columnMode: 'period',
     canVsUs: canVsUs
   };
 };

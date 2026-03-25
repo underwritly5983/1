@@ -8,7 +8,6 @@ const GenerateReport = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const [reportIds, setReportIds] = useState([])
-  const [reportName, setReportName] = useState('')
   const [availableReports, setAvailableReports] = useState([])
   const [selectedReports, setSelectedReports] = useState(new Set())
   const [generating, setGenerating] = useState(false)
@@ -57,15 +56,14 @@ const GenerateReport = () => {
     setGenerating(true)
     try {
       const response = await axios.post('/reports/generate-summary', {
-        reportIds: Array.from(selectedReports),
-        reportName: reportName || `IFTA Summary - ${new Date().toLocaleDateString()}`
+        reportIds: Array.from(selectedReports)
       })
       toast.success('Report generated successfully!')
       // Navigate to the jurisdiction report view
       if (response.data.report?.id) {
         navigate(`/reports/jurisdiction/${response.data.report.id}`)
       } else {
-        navigate('/reports/generated')
+        navigate('/reports')
       }
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to generate report')
@@ -82,20 +80,6 @@ const GenerateReport = () => {
       </div>
 
       <div className="card">
-        <div className="mb-6">
-          <label htmlFor="reportName" className="block text-sm font-medium text-gray-700 mb-2">
-            Report Name
-          </label>
-          <input
-            id="reportName"
-            type="text"
-            value={reportName}
-            onChange={(e) => setReportName(e.target.value)}
-            className="input-field"
-            placeholder="IFTA Summary Report - 2024"
-          />
-        </div>
-
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Select Reports ({selectedReports.size} selected)

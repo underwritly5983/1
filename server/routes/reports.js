@@ -8,13 +8,196 @@ const { parsePDF, extractQuarterInfo } = require('../services/pdfParser');
 const { summarizeIFTAReport, checkReportAge } = require('../services/aiService');
 const { generateReport, generateTemplateExcel } = require('../services/reportGenerator');
 const { generateSummaryPDF } = require('../services/pdfGenerator');
+const { generateReportPrintPdf } = require('../services/reportPrintPdfService');
+const { PDFDocument, StandardFonts } = require('pdf-lib');
+const { getUploadsRoot } = require('../lib/uploadPaths');
 
 const router = express.Router();
+
+// Generated report name: "COMPANY NAME IFTA Summary"
+function getGeneratedReportName(companyName) {
+  return `${String(companyName || 'Company').trim()} IFTA Summary`;
+}
+
+/** Turn stored disk path into URL path served by express.static('/uploads') */
+function publicUploadPathFromStoredPath(storedPath) {
+  if (!storedPath) return null;
+  const normalized = path.resolve(storedPath).replace(/\\/g, '/');
+  const lower = normalized.toLowerCase();
+  const idx = lower.indexOf('/uploads/');
+  if (idx >= 0) return normalized.slice(idx);
+  return `/uploads/reports/${path.basename(storedPath)}`;
+}
+
+function rowToSourceFileRow(r) {
+  return {
+    id: r.id,
+    fileName: r.file_name,
+    quarter: r.quarter_label,
+    year: r.year,
+    viewUrl: publicUploadPathFromStoredPath(r.file_path)
+  };
+}
+
+/** Normalize IDs saved on generated report JSON (may be strings from JSON). */
+function normalizeSourceReportIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n));
+}
+
+function parseReportDataJson(reportData) {
+  if (reportData == null) return {};
+  if (Buffer.isBuffer(reportData)) {
+    try {
+      return JSON.parse(reportData.toString('utf8'));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof reportData === 'string') {
+    try {
+      return JSON.parse(reportData);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof reportData === 'object') return reportData;
+  return {};
+}
+
+/**
+ * PDFs uploaded via "Upload Notice of Assessment" (ifta_reports) used to build this summary.
+ * Uses sourceReportIds when present, matches report_data.quarters to the DB, and falls back to
+ * uploads created shortly before the generated report when JSON is incomplete.
+ */
+async function buildSourceFilesForGeneratedReport(reportData, userId, options = {}) {
+  const { reportCreatedAt } = options;
+  const parsed = parseReportDataJson(reportData);
+  const ids = normalizeSourceReportIds(parsed.sourceReportIds);
+  let quarters = Array.isArray(parsed.quarters) ? parsed.quarters : [];
+  if (quarters.length === 0 && Array.isArray(parsed.quarterSummaries)) {
+    quarters = parsed.quarterSummaries;
+  }
+
+  const seen = new Set();
+  const out = [];
+
+  const pushFile = (f) => {
+    const nameKey = `name:${f.fileName}|${f.quarter ?? ''}|${f.year ?? ''}`;
+    if (f.id != null) {
+      if (seen.has(`id:${f.id}`)) return;
+      seen.add(`id:${f.id}`);
+      seen.add(nameKey);
+    } else {
+      if (seen.has(nameKey)) return;
+      seen.add(nameKey);
+    }
+    out.push(f);
+  };
+
+  if (ids.length > 0) {
+    const src = await db.query(
+      `SELECT id, file_name, quarter_label, year, file_path
+       FROM ifta_reports
+       WHERE id = ANY($1::int[]) AND user_id = $2
+       ORDER BY year NULLS LAST, quarter_label NULLS LAST, id ASC`,
+      [ids, userId]
+    );
+    src.rows.forEach((r) => pushFile(rowToSourceFileRow(r)));
+  }
+
+  for (const q of quarters) {
+    const fileName = q.fileName || q.file_name;
+    if (!fileName || fileName === '—') continue;
+
+    const quarter = q.quarter !== undefined && q.quarter !== null ? q.quarter : null;
+    const year = q.year !== undefined && q.year !== null ? q.year : null;
+    const nameKey = `name:${fileName}|${quarter ?? ''}|${year ?? ''}`;
+    if (seen.has(nameKey)) continue;
+
+    let row = null;
+    const strict = await db.query(
+      `SELECT id, file_name, quarter_label, year, file_path
+       FROM ifta_reports
+       WHERE user_id = $1 AND file_name = $2
+         AND (year IS NOT DISTINCT FROM $3::int)
+         AND (quarter_label IS NOT DISTINCT FROM $4)
+       ORDER BY id DESC
+       LIMIT 1`,
+      [userId, fileName, year, quarter]
+    );
+    if (strict.rows.length) row = strict.rows[0];
+    if (!row) {
+      const loose = await db.query(
+        `SELECT id, file_name, quarter_label, year, file_path
+         FROM ifta_reports
+         WHERE user_id = $1 AND file_name = $2
+         ORDER BY id DESC
+         LIMIT 1`,
+        [userId, fileName]
+      );
+      if (loose.rows.length) row = loose.rows[0];
+    }
+
+    if (row) {
+      pushFile(rowToSourceFileRow(row));
+    } else {
+      pushFile({
+        id: null,
+        fileName,
+        quarter,
+        year,
+        viewUrl: null
+      });
+    }
+  }
+
+  // Last resort: correlate uploads to this summary by time (when JSON lacks sourceReportIds / quarters)
+  if (out.length === 0 && reportCreatedAt) {
+    try {
+      let fallback = await db.query(
+        `SELECT id, file_name, quarter_label, year, file_path
+         FROM ifta_reports
+         WHERE user_id = $1
+           AND file_path IS NOT NULL
+           AND file_path != ''
+           AND created_at >= ($2::timestamptz - interval '2 hours')
+           AND created_at <= ($2::timestamptz + interval '2 minutes')
+         ORDER BY created_at ASC
+         LIMIT 8`,
+        [userId, reportCreatedAt]
+      );
+      if (fallback.rows.length === 0) {
+        fallback = await db.query(
+          `SELECT id, file_name, quarter_label, year, file_path
+           FROM (
+             SELECT id, file_name, quarter_label, year, file_path, created_at
+             FROM ifta_reports
+             WHERE user_id = $1
+               AND file_path IS NOT NULL
+               AND file_path != ''
+               AND created_at <= ($2::timestamptz + interval '1 minute')
+               AND created_at >= ($2::timestamptz - interval '72 hours')
+             ORDER BY created_at DESC
+             LIMIT 4
+           ) AS recent
+           ORDER BY recent.created_at ASC`,
+          [userId, reportCreatedAt]
+        );
+      }
+      fallback.rows.forEach((r) => pushFile(rowToSourceFileRow(r)));
+    } catch (e) {
+      console.warn('buildSourceFilesForGeneratedReport fallback:', e.message);
+    }
+  }
+
+  return out;
+}
 
 // Configure multer for IFTA report uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = process.env.UPLOAD_DIR || './uploads/reports';
+    const uploadDir = path.join(getUploadsRoot(), 'reports');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -33,7 +216,14 @@ const upload = multer({
     files: 4 // Maximum 4 files
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    const mime = String(file.mimetype || '').toLowerCase();
+    const name = String(file.originalname || '').toLowerCase();
+    const looksPdf =
+      mime === 'application/pdf' ||
+      mime === 'application/x-pdf' ||
+      (mime === 'application/octet-stream' && name.endsWith('.pdf')) ||
+      name.endsWith('.pdf');
+    if (looksPdf) {
       cb(null, true);
     } else {
       cb(new Error('Only PDF files are allowed'));
@@ -94,16 +284,11 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
           quarterInfo = extractQuarterInfo(pdfData.text || '');
         }
         
-        // Check if report is older than 6 months
-        const isOldReport = checkReportAge(quarterInfo.detectedDate);
-        
         // Store report in database
-        // Store enough text to include the jurisdiction table.
-        // Some PDFs place the table later, so 200k can truncate it.
         const rawTextToStore = pdfData.text.length > 2000000
           ? pdfData.text.substring(0, 2000000)
           : pdfData.text;
-        
+
         const result = await db.query(
           `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -156,10 +341,8 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
             quarter: report.quarter_label,
             year: report.year,
             detectedDate: report.detected_date,
-            status: report.status,
-            isOldReport
-          },
-          warning: isOldReport ? 'This report appears to be older than 6 months. Please verify the data is current.' : null
+            status: report.status
+          }
         });
       } catch (error) {
         console.error(`Error processing ${file.originalname}:`, error);
@@ -220,124 +403,84 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
         }
 
         if (reportsResult.rows.length > 0) {
-          // Use reports even if summaries aren't ready - we have raw text for jurisdiction extraction
-          // Filter to reports that have at least raw text
-          const reportsWithData = reportsResult.rows.filter(r => r.raw_text && r.raw_text.length > 100);
-          
-          if (reportsWithData.length === 0) {
-            console.warn('No reports with raw text yet, creating placeholder report');
-            // Create a placeholder report that will be updated when data is ready
-            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
-            const placeholderData = {
-              companyName: user.company_name,
-              generatedAt: new Date().toISOString(),
-              quarters: reportsResult.rows.map(r => ({
-                quarter: r.quarter_label,
-                year: r.year,
-                fileName: r.file_name,
-                status: r.status,
-                summary: 'Processing...'
-              })),
-              totals: { totalMiles: 0 },
-              jurisdictionData: { 
-                jurisdictions: [], 
-                grandTotal: 0, 
-                canVsUs: { 
-                  can: { total: 0, percentage: 0 }, 
-                  us: { total: 0, percentage: 0 },
-                  grandTotal: 0
-                } 
-              },
-              processing: true
-            };
-            
-            const placeholderResult = await db.query(
-              `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
-               VALUES ($1, $2, $3, $4)
-               RETURNING id`,
-              [req.user.id, reportName, JSON.stringify(placeholderData), 'auto-generated-pending']
-            );
-            
-            generatedReportId = placeholderResult.rows[0].id;
-            console.log('Created placeholder report:', generatedReportId);
-          } else {
-            const reports = reportsWithData.map(r => ({
-              id: r.id,
-              fileName: r.file_name,
-              quarter: r.quarter_label,
-              year: r.year,
-              summary: r.summary || { summary: 'Processing...', jurisdictions: [] },
-              detectedDate: r.detected_date,
-              rawText: r.raw_text
-            }));
+          // Include every file in this upload batch in the combined summary. Do not drop rows with
+          // short raw_text (scanned PDFs, odd layouts); jurisdiction extraction falls back to
+          // AI summary.jurisdictions when raw text is missing or sparse.
+          const reports = reportsResult.rows.map((r) => ({
+            id: r.id,
+            fileName: r.file_name,
+            quarter: r.quarter_label,
+            year: r.year,
+            summary: r.summary || { summary: 'Processing...', jurisdictions: [] },
+            detectedDate: r.detected_date,
+            rawText: r.raw_text
+          }));
 
           // Sort chronologically
           reports.sort((a, b) => {
             if (a.year !== b.year) return a.year - b.year;
-            const qOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+            const qOrder = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
             return (qOrder[a.quarter] || 0) - (qOrder[b.quarter] || 0);
           });
 
-            // Generate report data
-            const reportData = await generateReport(reports, user);
+          // Generate report data
+          const reportData = await generateReport(reports, user);
+          reportData.sourceReportIds = reportIds;
 
-            // Generate and save summary PDF
-            const pdfBuffer = await generateSummaryPDF(reportData, user);
-            
-            // Save PDF to file
-            const pdfFilename = `summary-${req.user.id}-${Date.now()}.pdf`;
-            const uploadDir = process.env.UPLOAD_DIR || './uploads';
-            const summariesDir = path.join(uploadDir, 'summaries');
-            if (!fs.existsSync(summariesDir)) {
-              fs.mkdirSync(summariesDir, { recursive: true });
-            }
-            const pdfPath = path.join(summariesDir, pdfFilename);
-            fs.writeFileSync(pdfPath, pdfBuffer);
+          // Generate and save summary PDF
+          const pdfBuffer = await generateSummaryPDF(reportData, user);
 
-            // Check if a report for today already exists, update it instead of creating new
-            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
-            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-            
-            // Check for existing report from today
-            const existingReport = await db.query(
-              `SELECT id FROM generated_reports 
+          // Save PDF to file
+          const pdfFilename = `summary-${req.user.id}-${Date.now()}.pdf`;
+          const summariesDir = path.join(getUploadsRoot(), 'summaries');
+          if (!fs.existsSync(summariesDir)) {
+            fs.mkdirSync(summariesDir, { recursive: true });
+          }
+          const pdfPath = path.join(summariesDir, pdfFilename);
+          fs.writeFileSync(pdfPath, pdfBuffer);
+
+          // Check if a report for today already exists, update it instead of creating new
+          const reportName = getGeneratedReportName(reportData.companyName || user.company_name);
+
+          // Check for existing report from today
+          const existingReport = await db.query(
+            `SELECT id FROM generated_reports 
                WHERE user_id = $1 AND report_name = $2 
                ORDER BY created_at DESC LIMIT 1`,
-              [req.user.id, reportName]
-            );
-            
-            let saveResult;
-            if (existingReport.rows.length > 0) {
-              // Update existing report
-              await db.query(
-                `UPDATE generated_reports 
+            [req.user.id, reportName]
+          );
+
+          let saveResult;
+          if (existingReport.rows.length > 0) {
+            // Update existing report
+            await db.query(
+              `UPDATE generated_reports 
                  SET report_data = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP
                  WHERE id = $3`,
-                [JSON.stringify(reportData), pdfPath, existingReport.rows[0].id]
-              );
-              saveResult = { rows: [{ id: existingReport.rows[0].id }] };
-              console.log('Updated existing report:', existingReport.rows[0].id);
-            } else {
-              // Create new report
-              saveResult = await db.query(
-                `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
+              [JSON.stringify(reportData), pdfPath, existingReport.rows[0].id]
+            );
+            saveResult = { rows: [{ id: existingReport.rows[0].id }] };
+            console.log('Updated existing report:', existingReport.rows[0].id);
+          } else {
+            // Create new report
+            saveResult = await db.query(
+              `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
                  VALUES ($1, $2, $3, $4, $5)
                  RETURNING id`,
-                [
-                  req.user.id,
-                  reportName,
-                  JSON.stringify(reportData),
-                  pdfPath,
-                  'auto-generated'
-                ]
-              );
-              console.log('Created new report:', saveResult.rows[0].id);
-            }
-
-            summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
-            generatedReportId = saveResult.rows[0].id;
-            console.log('Created/updated report with data:', generatedReportId);
+              [
+                req.user.id,
+                reportName,
+                JSON.stringify(reportData),
+                pdfPath,
+                'auto-generated'
+              ]
+            );
+            console.log('Created new report:', saveResult.rows[0].id);
           }
+
+          summaryPdfUrl = `/uploads/summaries/${pdfFilename}`;
+          generatedReportId = saveResult.rows[0].id;
+          console.log('Created/updated report with data:', generatedReportId);
         }
       } catch (error) {
         console.error('Error generating summary PDF:', error);
@@ -345,13 +488,12 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
         // Still create a basic report entry even if generation fails
         if (!generatedReportId) {
           try {
-            const reportName = `IFTA Summary - ${new Date().toLocaleDateString()}`;
             const userResult = await db.query(
               'SELECT company_name FROM users WHERE id = $1',
               [req.user.id]
             );
             const user = userResult.rows[0];
-            
+            const reportName = getGeneratedReportName(user.company_name);
             const errorReportData = {
               companyName: user.company_name,
               generatedAt: new Date().toISOString(),
@@ -360,7 +502,6 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
               jurisdictionData: { jurisdictions: [], grandTotal: 0 },
               error: 'Report generation encountered an error. Please try generating manually.'
             };
-            
             const errorSaveResult = await db.query(
               `INSERT INTO generated_reports (user_id, report_name, report_data, template_used)
                VALUES ($1, $2, $3, $4)
@@ -375,11 +516,22 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
       }
     }
 
+    // Only show quarter-age warning if the MOST RECENT quarter (among uploaded) is over 6 months old
+    let showQuarterAgeWarning = false;
+    const datesWithResults = results
+      .filter(r => r.report && r.report.detectedDate)
+      .map(r => r.report.detectedDate);
+    if (datesWithResults.length > 0) {
+      const mostRecentDate = new Date(Math.max(...datesWithResults.map(d => new Date(d).getTime())));
+      showQuarterAgeWarning = checkReportAge(mostRecentDate);
+    }
+
     res.json({
       message: `${req.files.length} file(s) uploaded successfully`,
       results,
       summaryPdfUrl,
-      generatedReportId
+      generatedReportId,
+      showQuarterAgeWarning
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -418,7 +570,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     const rawTextToStore = pdfData.text.length > 2000000
       ? pdfData.text.substring(0, 2000000)
       : pdfData.text;
-    
+
     const result = await db.query(
       `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -480,20 +632,22 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
   }
 });
 
-// Get all reports for user
+// Get all reports for user (with company name from users)
 router.get('/', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, file_name, quarter_label, year, detected_date, status, created_at, summary
-       FROM ifta_reports
-       WHERE user_id = $1
-       ORDER BY year DESC, quarter_label DESC, created_at DESC`,
+      `SELECT r.id, r.file_name, r.quarter_label, r.year, r.detected_date, r.status, r.created_at, r.summary, u.company_name
+       FROM ifta_reports r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.user_id = $1
+       ORDER BY r.year DESC NULLS LAST, r.quarter_label DESC NULLS LAST, r.created_at DESC`,
       [req.user.id]
     );
 
     const reports = result.rows.map(row => ({
       id: row.id,
       fileName: row.file_name,
+      companyName: row.company_name || '',
       quarter: row.quarter_label,
       year: row.year,
       detectedDate: row.detected_date,
@@ -508,6 +662,43 @@ router.get('/', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch reports' });
   }
 });
+
+// Delete multiple reports — same base path as GET / so URL is /api/reports (no /delete-batch)
+const deleteBatchHandler = async (req, res) => {
+  try {
+    let { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Report IDs array required' });
+    }
+    ids = ids.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Valid report IDs required' });
+    }
+
+    const result = await db.query(
+      'SELECT id, file_path FROM ifta_reports WHERE id = ANY($1::int[]) AND user_id = $2',
+      [ids, req.user.id]
+    );
+
+    for (const row of result.rows) {
+      if (row.file_path && fs.existsSync(row.file_path)) {
+        try {
+          fs.unlinkSync(row.file_path);
+        } catch (e) {
+          console.warn('Could not delete file:', row.file_path, e.message);
+        }
+      }
+    }
+
+    await db.query('DELETE FROM ifta_reports WHERE id = ANY($1::int[]) AND user_id = $2', [ids, req.user.id]);
+    const deleted = result.rows.length;
+    res.json({ message: `${deleted} report${deleted !== 1 ? 's' : ''} deleted successfully`, deleted });
+  } catch (error) {
+    console.error('Delete batch reports error:', error);
+    res.status(500).json({ error: 'Failed to delete reports' });
+  }
+};
+router.delete('/', authenticate, deleteBatchHandler);
 
 // Get single report
 router.get('/:id', authenticate, async (req, res) => {
@@ -542,6 +733,37 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
+// Rename uploaded IFTA PDF (display name only; does not change the file on disk)
+router.patch('/:id', authenticate, async (req, res) => {
+  try {
+    const { fileName } = req.body;
+    if (fileName == null || typeof fileName !== 'string') {
+      return res.status(400).json({ error: 'fileName is required' });
+    }
+    const trimmed = fileName.trim();
+    if (trimmed.length < 1 || trimmed.length > 512) {
+      return res.status(400).json({ error: 'fileName must be 1–512 characters' });
+    }
+
+    const result = await db.query(
+      `UPDATE ifta_reports
+       SET file_name = $1
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, file_name`,
+      [trimmed, req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    res.json({ message: 'File name updated', report: result.rows[0] });
+  } catch (error) {
+    console.error('Patch upload report error:', error);
+    res.status(500).json({ error: 'Failed to update file name' });
+  }
+});
+
 // Delete report
 router.delete('/:id', authenticate, async (req, res) => {
   try {
@@ -573,9 +795,12 @@ router.delete('/:id', authenticate, async (req, res) => {
 // Generate final summary report
 router.post('/generate-summary', authenticate, async (req, res) => {
   try {
-    const { reportIds, reportName } = req.body;
+    const { reportIds: rawReportIds, reportName } = req.body;
+    const reportIds = normalizeSourceReportIds(
+      Array.isArray(rawReportIds) ? rawReportIds : []
+    );
 
-    if (!reportIds || !Array.isArray(reportIds) || reportIds.length === 0) {
+    if (reportIds.length === 0) {
       return res.status(400).json({ error: 'Report IDs required' });
     }
 
@@ -616,11 +841,12 @@ router.post('/generate-summary', authenticate, async (req, res) => {
       return (qOrder[a.quarter] || 0) - (qOrder[b.quarter] || 0);
     });
 
-    // Generate report
+    // Generate report (persist upload IDs so Generated Reports can list Notice of Assessment PDFs)
     const reportData = await generateReport(reports, user);
+    reportData.sourceReportIds = reportIds;
 
     // Check if report with same name exists, update instead of creating new
-    const finalReportName = reportName || 'IFTA Summary Report';
+    const finalReportName = getGeneratedReportName(reportData.companyName || user.company_name);
     const existingReport = await db.query(
       `SELECT id FROM generated_reports 
        WHERE user_id = $1 AND report_name = $2 
@@ -664,7 +890,7 @@ router.post('/generate-summary', authenticate, async (req, res) => {
       message: 'Report generated successfully',
       report: {
         id: saveResult.rows[0].id,
-        name: reportName || 'IFTA Summary Report',
+        name: finalReportName,
         data: reportData,
         createdAt: saveResult.rows[0].created_at
       },
@@ -682,21 +908,77 @@ router.post('/generate-summary', authenticate, async (req, res) => {
   }
 });
 
-// Get generated reports
+// Get generated reports (includes source PDFs used for each summary)
 router.get('/generated/list', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, report_name, created_at, updated_at
+      `SELECT id, report_name, created_at, updated_at, report_data
        FROM generated_reports
        WHERE user_id = $1
        ORDER BY created_at DESC`,
       [req.user.id]
     );
 
-    res.json({ reports: result.rows });
+    const reports = await Promise.all(
+      result.rows.map(async (row) => {
+        let sourceFiles = [];
+        try {
+          sourceFiles = await buildSourceFilesForGeneratedReport(row.report_data, req.user.id, {
+            reportCreatedAt: row.created_at
+          });
+        } catch (e) {
+          console.warn('buildSourceFilesForGeneratedReport list:', e.message);
+        }
+        return {
+          id: row.id,
+          report_name: row.report_name,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          sourceFiles
+        };
+      })
+    );
+
+    res.json({ reports });
   } catch (error) {
     console.error('Get generated reports error:', error);
     res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+// Delete multiple generated reports (must be before /generated/:id)
+router.post('/generated/delete-batch', authenticate, async (req, res) => {
+  try {
+    let ids = req.body.ids;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Report IDs array required' });
+    }
+    ids = ids.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'Valid report IDs required' });
+    }
+
+    const result = await db.query(
+      'SELECT id, file_path FROM generated_reports WHERE id = ANY($1::int[]) AND user_id = $2',
+      [ids, req.user.id]
+    );
+
+    for (const row of result.rows) {
+      if (row.file_path && fs.existsSync(row.file_path)) {
+        try {
+          fs.unlinkSync(row.file_path);
+        } catch (e) {
+          console.warn('Could not delete file:', row.file_path, e.message);
+        }
+      }
+    }
+
+    await db.query('DELETE FROM generated_reports WHERE id = ANY($1::int[]) AND user_id = $2', [ids, req.user.id]);
+    const deleted = result.rows.length;
+    res.json({ message: `${deleted} report${deleted !== 1 ? 's' : ''} deleted`, deleted });
+  } catch (error) {
+    console.error('Delete batch generated reports error:', error);
+    res.status(500).json({ error: 'Failed to delete reports' });
   }
 });
 
@@ -714,10 +996,51 @@ router.get('/generated/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    res.json({ report: result.rows[0] });
+    const row = result.rows[0];
+    let sourceFiles = [];
+    try {
+      sourceFiles = await buildSourceFilesForGeneratedReport(row.report_data, req.user.id, {
+        reportCreatedAt: row.created_at
+      });
+    } catch (e) {
+      console.warn('buildSourceFilesForGeneratedReport:', e.message);
+    }
+
+    res.json({ report: { ...row, sourceFiles } });
   } catch (error) {
     console.error('Get generated report error:', error);
     res.status(500).json({ error: 'Failed to fetch report' });
+  }
+});
+
+// Rename generated report
+router.patch('/generated/:id', authenticate, async (req, res) => {
+  try {
+    const { reportName } = req.body;
+    if (reportName == null || typeof reportName !== 'string') {
+      return res.status(400).json({ error: 'reportName is required' });
+    }
+    const trimmed = reportName.trim();
+    if (trimmed.length < 1 || trimmed.length > 255) {
+      return res.status(400).json({ error: 'Report name must be 1–255 characters' });
+    }
+
+    const result = await db.query(
+      `UPDATE generated_reports
+       SET report_name = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, report_name`,
+      [trimmed, req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    res.json({ message: 'Report updated', report: result.rows[0] });
+  } catch (error) {
+    console.error('Patch generated report error:', error);
+    res.status(500).json({ error: 'Failed to update report' });
   }
 });
 
@@ -775,9 +1098,11 @@ router.get('/generated/:id/excel', authenticate, async (req, res) => {
       ? JSON.parse(report.report_data) 
       : report.report_data;
 
-    // Generate Excel matching template
-    const templatePath = path.join(process.cwd(), 'IFTA SUMMARY.xlsx');
-    const workbook = generateTemplateExcel(reportData, templatePath);
+    // Generate Excel matching IFTA SUMMARY.xlsx (project root or cwd)
+    const templatePath = fs.existsSync(path.join(process.cwd(), 'IFTA SUMMARY.xlsx'))
+      ? path.join(process.cwd(), 'IFTA SUMMARY.xlsx')
+      : path.join(__dirname, '..', '..', 'IFTA SUMMARY.xlsx');
+    const workbook = generateTemplateExcel(reportData, fs.existsSync(templatePath) ? templatePath : null);
 
     // Generate filename
     const filename = `${report.report_name.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.xlsx`;
@@ -797,11 +1122,11 @@ router.get('/generated/:id/excel', authenticate, async (req, res) => {
   }
 });
 
-// Download report as PDF
+// Download report as PDF (summary first, then source PDFs in chronological order)
 router.get('/generated/:id/pdf', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT gr.id, gr.report_name, gr.report_data, u.company_name, u.logo_url, 
+      `SELECT gr.id, gr.report_name, gr.report_data, gr.created_at, u.company_name, u.logo_url, 
               u.brand_color_primary, u.brand_color_secondary
        FROM generated_reports gr
        JOIN users u ON u.id = gr.user_id
@@ -814,79 +1139,114 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
     }
 
     const report = result.rows[0];
-    const reportData = typeof report.report_data === 'string' 
-      ? JSON.parse(report.report_data) 
-      : report.report_data;
+    const reportData = typeof report.report_data === 'string'
+      ? JSON.parse(report.report_data)
+      : report.report_data || {};
 
-    // Generate PDF using pdfkit
-    const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ 
-      margin: 50,
-      size: 'LETTER'
-    });
-    
-    const filename = `${report.report_name.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    
-    doc.pipe(res);
+    // PDF = screen-matching layout (report name, 4 cards, jurisdiction table + Grand Total, Top 15) via pdfkit
+    const summaryBuffer = await generateReportPrintPdf(report, reportData, {});
+    const sourceReportIds = reportData.sourceReportIds;
 
-    // Title and header
-    doc.fontSize(20).font('Helvetica-Bold').text(report.report_name, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(12).font('Helvetica').text(`Company: ${report.company_name}`, { align: 'center' });
-    doc.fontSize(10).text(`Generated: ${new Date(report.created_at).toLocaleDateString()}`, { align: 'center' });
-    doc.moveDown(1);
+    let finalBuffer = summaryBuffer;
 
-    // Jurisdiction table
-    if (reportData.jurisdictionData && reportData.jurisdictionData.jurisdictions) {
-      doc.fontSize(14).font('Helvetica-Bold').text('Jurisdiction Summary', { underline: true });
-      doc.moveDown(0.5);
+    if (sourceReportIds && Array.isArray(sourceReportIds) && sourceReportIds.length > 0) {
+      const sourceResult = await db.query(
+        `SELECT id, file_path, file_name, year, quarter_label, detected_date
+         FROM ifta_reports
+         WHERE id = ANY($1::int[]) AND user_id = $2 AND file_path IS NOT NULL AND file_path != ''`,
+        [sourceReportIds, req.user.id]
+      );
 
-      // Table headers
-      doc.fontSize(9).font('Helvetica-Bold');
-      let startY = doc.y;
-      doc.text('Jurisdiction', 50, startY);
-      doc.text('Q1', 150, startY);
-      doc.text('Q2', 200, startY);
-      doc.text('Q3', 250, startY);
-      doc.text('Q4', 300, startY);
-      doc.text('Total KM', 350, startY);
-      doc.text('%', 450, startY);
-      doc.moveDown(0.3);
-      doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
-      doc.moveDown(0.3);
-
-      // Table rows
-      doc.font('Helvetica').fontSize(9);
-      reportData.jurisdictionData.jurisdictions.forEach((juris, index) => {
-        if (doc.y > 700) { // New page if needed
-          doc.addPage();
-          startY = doc.y;
-        }
-        
-        const y = doc.y;
-        doc.text(juris.code, 50, y);
-        juris.quarters.forEach((q, idx) => {
-          const x = 150 + (idx * 50);
-          doc.text(q ? q.km.toLocaleString() : '-', x, y, { width: 45, align: 'right' });
+      if (sourceResult.rows.length > 0) {
+        // Sort chronologically: oldest to newest (year asc, quarter asc, detected_date asc)
+        const qOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+        sourceResult.rows.sort((a, b) => {
+          const yearA = a.year ?? 0;
+          const yearB = b.year ?? 0;
+          if (yearA !== yearB) return yearA - yearB;
+          const qA = qOrder[a.quarter_label] ?? 0;
+          const qB = qOrder[b.quarter_label] ?? 0;
+          if (qA !== qB) return qA - qB;
+          const dateA = a.detected_date ? new Date(a.detected_date).getTime() : 0;
+          const dateB = b.detected_date ? new Date(b.detected_date).getTime() : 0;
+          return dateA - dateB;
         });
-        doc.text(juris.totalKM.toLocaleString(), 350, y, { width: 90, align: 'right' });
-        doc.text(`${juris.percentage.toFixed(2)}%`, 450, y, { width: 50, align: 'right' });
-        doc.moveDown(0.4);
-      });
 
-      // Grand total row
-      doc.moveDown(0.3);
-      doc.moveTo(50, doc.y).lineTo(500, doc.y).stroke();
-      doc.moveDown(0.3);
-      doc.font('Helvetica-Bold');
-      doc.text('Grand Total', 50, doc.y);
-      doc.text(reportData.jurisdictionData.grandTotal.toLocaleString(), 350, doc.y, { width: 90, align: 'right' });
-      doc.text('100.00%', 450, doc.y, { width: 50, align: 'right' });
+        const mergedPdf = await PDFDocument.create();
+
+        // 1) Summary pages first — add disclaimer to bottom of first page
+        const summaryDoc = await PDFDocument.load(summaryBuffer);
+        const font = await summaryDoc.embedStandardFont(StandardFonts.Helvetica);
+        const fontBold = await summaryDoc.embedStandardFont(StandardFonts.HelveticaBold);
+        const firstPage = summaryDoc.getPage(0);
+        // Disclaimer at bottom of first page (y from bottom)
+        let y = 32;
+        firstPage.drawText('Source Reports', { x: 50, y, size: 10, font: fontBold });
+        y += 16;
+        firstPage.drawText('Chronological (Oldest to Newest)', { x: 50, y, size: 9, font });
+        y += 14;
+        firstPage.drawText('The following pages are the uploaded IFTA reports used to generate the summary above.', { x: 50, y, size: 8, font });
+        y += 18;
+        for (const row of sourceResult.rows) {
+          const label = [row.quarter_label, row.year].filter(Boolean).join(' ') || 'Report';
+          const name = row.file_name || `Report ${row.id}`;
+          firstPage.drawText(`• ${label} — ${name}`, { x: 50, y, size: 8, font });
+          y += 14;
+        }
+
+        const summaryPageCount = summaryDoc.getPageCount();
+        const summaryIndices = Array.from({ length: summaryPageCount }, (_, i) => i);
+        const summaryPages = await mergedPdf.copyPages(summaryDoc, summaryIndices);
+        summaryPages.forEach(p => mergedPdf.addPage(p));
+
+        // 2) Add a "Source Reports" divider page listing uploaded files (chronological)
+        const dividerPage = mergedPdf.addPage([612, 792]);
+        const helvetica = await mergedPdf.embedStandardFont(StandardFonts.Helvetica);
+        const helveticaBold = await mergedPdf.embedStandardFont(StandardFonts.HelveticaBold);
+        const pageHeight = 792;
+        const marginPx = 50;
+        let divY = pageHeight - marginPx;
+        dividerPage.drawText('Source Reports', { x: marginPx, y: divY, size: 16, font: helveticaBold });
+        divY -= 24;
+        dividerPage.drawText('The following uploaded files (in chronological order) were used to generate the summary above.', { x: marginPx, y: divY, size: 10, font: helvetica });
+        divY -= 20;
+        dividerPage.drawText('Each document appears on the subsequent pages in the order listed below.', { x: marginPx, y: divY, size: 10, font: helvetica });
+        divY -= 28;
+        for (let i = 0; i < sourceResult.rows.length; i++) {
+          const row = sourceResult.rows[i];
+          const label = [row.quarter_label, row.year].filter(Boolean).join(' ') || 'Report';
+          const name = row.file_name || `Report ${row.id}`;
+          dividerPage.drawText(`${i + 1}. ${label} — ${name}`, { x: marginPx, y: divY, size: 10, font: helvetica });
+          divY -= 18;
+        }
+
+        // 3) Append each source PDF in chronological order (on subsequent pages)
+        for (const row of sourceResult.rows) {
+          const filePath = path.isAbsolute(row.file_path) ? row.file_path : path.join(process.cwd(), row.file_path);
+          if (!fs.existsSync(filePath)) continue;
+          try {
+            const bytes = fs.readFileSync(filePath);
+            const doc = await PDFDocument.load(bytes);
+            const pageCount = doc.getPageCount();
+            const indices = Array.from({ length: pageCount }, (_, i) => i);
+            const pages = await mergedPdf.copyPages(doc, indices);
+            pages.forEach(p => mergedPdf.addPage(p));
+          } catch (err) {
+            console.warn('Could not merge source PDF:', row.file_path, err.message);
+          }
+        }
+
+        finalBuffer = Buffer.from(await mergedPdf.save());
+      }
     }
 
-    doc.end();
+    const filename = 'IFTA Summary.PDF';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.send(finalBuffer);
   } catch (error) {
     console.error('Download PDF error:', error);
     res.status(500).json({ error: 'Failed to generate PDF file' });

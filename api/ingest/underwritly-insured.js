@@ -1,15 +1,9 @@
 /**
- * Vercel serverless function — POST /api/ingest/underwritly-insured
- *
- * Your IFTA app is built with Vite (not Next.js). The browser “API” path was
- * serving the SPA HTML on GET and had no POST handler → 405.
- *
- * Copy this file into your IFTA project at the same path:
- *   api/ingest/underwritly-insured.js
- * (next to package.json — same style as the Underwritly landing site.)
- *
- * Redeploy the IFTA project on Vercel.
+ * Vercel serverless — POST /api/ingest/underwritly-insured
+ * Persists Underwritly landing webhook payloads into ifta_reports (same as upload-multiple).
  */
+
+const crypto = require("crypto");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;
@@ -44,38 +38,50 @@ function readJsonBody(req, maxLen) {
   });
 }
 
+function verifyIngestSecret(req) {
+  var expected = String(process.env.IFTA_INGEST_SECRET || "").trim();
+  if (!expected) return true;
+  var got = String(req.headers["x-underwritly-ingest-secret"] || "");
+  if (got.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(got, "utf8"), Buffer.from(expected, "utf8"));
+  } catch (e) {
+    return false;
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, X-Underwritly-Ingest-Secret"
+  );
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     return res.status(204).end();
   }
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST, OPTIONS");
     return sendJson(res, 405, { ok: false, error: "Method not allowed — use POST with JSON." });
   }
+  if (!verifyIngestSecret(req)) {
+    return sendJson(res, 401, { ok: false, error: "Invalid ingest secret." });
+  }
   try {
+    var processUnderwritlyIngestWebhook = require("../../server/services/underwritlyIngest")
+      .processUnderwritlyIngestWebhook;
     var body = await readJsonBody(req);
-    var event = body && body.event;
-    var files = Array.isArray(body && body.files) ? body.files : [];
-    var insuredId = body && body.insuredId;
-
-    if (event !== "insured_ifta_upload") {
-      return sendJson(res, 400, { ok: false, error: "Unknown event." });
-    }
-
-    console.log("[underwritly-insured] ingest", {
-      insuredId: insuredId,
-      brokerEmail: body && body.brokerEmail,
-      fileCount: files.length,
+    var result = await processUnderwritlyIngestWebhook(body);
+    return sendJson(res, 200, {
+      ok: true,
+      reportIds: result.reportIds,
+      brokerEmail: result.brokerEmail,
+      errors: result.errors && result.errors.length ? result.errors : undefined,
     });
-
-    // TODO: wire body.files[].bodyBase64 into your IFTA report pipeline
-
-    return sendJson(res, 200, { ok: true, received: files.length, insuredId: insuredId });
   } catch (e) {
-    console.error("[underwritly-insured]", e && e.message);
-    return sendJson(res, 500, { ok: false, error: (e && e.message) || "Error" });
+    console.error("[underwritly-insured]", e && e.message, e && e.stack);
+    var msg = (e && e.message) || "Error";
+    var status = /not found|Invalid|Missing|No files/i.test(msg) ? 400 : 500;
+    return sendJson(res, status, { ok: false, error: msg });
   }
 };

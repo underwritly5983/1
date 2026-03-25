@@ -1,4 +1,10 @@
 require('dotenv').config();
+
+// Prevent process exit on unhandled promise rejections (e.g. in route handlers)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +13,7 @@ const path = require('path');
 const fs = require('fs');
 
 const db = require('./config/database');
+const { getUploadsRoot } = require('./lib/uploadPaths');
 const authRoutes = require('./routes/auth');
 const reportRoutes = require('./routes/reports');
 const userRoutes = require('./routes/users');
@@ -16,18 +23,23 @@ const { router: notificationRoutes } = require('./routes/notifications');
 
 const app = express();
 
-// Create uploads directory if it doesn't exist
-const uploadDir = process.env.UPLOAD_DIR || './uploads';
+// Create uploads directory if it doesn't exist (Vercel: only /tmp is writable)
+let uploadDir = getUploadsRoot();
+if (!process.env.UPLOAD_DIR) {
+  process.env.UPLOAD_DIR = uploadDir;
+}
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || (process.env.VERCEL ? true : 'http://localhost:3000'),
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -92,16 +104,19 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Initialize database and start server
-db.init().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
-  });
-}).catch(err => {
+const initPromise = db.init().catch((err) => {
   console.error('Failed to start server:', err);
-  // Don't exit - allow retry
   console.log('⚠️  Server will retry on next change...');
 });
+
+// Vercel serverless: export app only — do not listen on a port
+if (!process.env.VERCEL) {
+  initPromise.then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📊 Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
+    });
+  });
+}
 
 module.exports = app;

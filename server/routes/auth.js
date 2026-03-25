@@ -9,6 +9,9 @@ const db = require('../config/database');
 
 const router = express.Router();
 
+const isProduction = process.env.NODE_ENV === 'production';
+const allowPublicRegistration = process.env.ALLOW_PUBLIC_REGISTRATION === 'true';
+
 // Configure multer for logo uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -57,8 +60,12 @@ router.post('/register',
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-
       const { email, password, companyName, phone, brandColorPrimary, brandColorSecondary } = req.body;
+
+      if (isProduction && !allowPublicRegistration) {
+        return res.status(403).json({ error: 'Public registration is disabled.' });
+      }
+
 
       // Check if user exists
       const existingUser = await db.query('SELECT id FROM users WHERE email = $1', [email]);
@@ -128,11 +135,18 @@ router.post('/login',
     body('password').notEmpty()
   ],
   async (req, res) => {
+    const sendSafe = (status, body) => {
+      if (!res.headersSent) res.status(status).json(body);
+    };
     try {
+      if (!process.env.JWT_SECRET) {
+        console.error('Login failed: JWT_SECRET not set');
+        return sendSafe(500, { error: 'Server misconfiguration. Set JWT_SECRET in .env or environment.' });
+      }
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         console.log('Login validation errors:', errors.array());
-        return res.status(400).json({ errors: errors.array() });
+        return sendSafe(400, { errors: errors.array() });
       }
 
       const { email, password } = req.body;
@@ -146,7 +160,7 @@ router.post('/login',
 
       if (result.rows.length === 0) {
         console.log('User not found:', email);
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return sendSafe(401, { error: 'Invalid credentials' });
       }
 
       const user = result.rows[0];
@@ -155,24 +169,26 @@ router.post('/login',
       const isValid = await bcrypt.compare(password, user.password_hash);
       if (!isValid) {
         console.log('Invalid password for:', email);
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return sendSafe(401, { error: 'Invalid credentials' });
       }
-      
+
       console.log('Login successful for:', email);
 
-      // Update last login
-      await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+      // Update last login and track analytics (non-fatal: do not fail login if these fail)
+      try {
+        await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+        await db.query(
+          'INSERT INTO usage_analytics (user_id, event_type) VALUES ($1, $2)',
+          [user.id, 'user_login']
+        );
+      } catch (err) {
+        console.warn('Login: optional update/analytics failed', err.message);
+      }
 
-      // Track analytics
-      await db.query(
-        'INSERT INTO usage_analytics (user_id, event_type) VALUES ($1, $2)',
-        [user.id, 'user_login']
-      );
-
-      // Generate token
+      // Generate token (JWT_SECRET already checked above)
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-      res.json({
+      return sendSafe(200, {
         token,
         user: {
           id: user.id,
@@ -185,9 +201,13 @@ router.post('/login',
       });
     } catch (error) {
       console.error('Login error:', error);
-      res.status(500).json({ error: 'Login failed' });
+      if (error.code === 'NO_DATABASE') {
+        return sendSafe(503, { error: 'Service unavailable. Database not configured.' });
+      }
+      return sendSafe(500, { error: 'Login failed' });
     }
   }
 );
 
 module.exports = router;
+
