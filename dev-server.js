@@ -4,7 +4,7 @@
  *
  * Copy `.env.example` to `.env` and set SMTP_*, MAIL_FROM, PROFILE_ACCESS_SECRET (same value as on Vercel).
  * Optional: SITE_URL=http://localhost:PORT for clickable absolute links in confirmation emails.
- * Optional: USER_STORE=file to force local JSON storage when KV_* env vars are set but not for this project.
+ * Optional: USER_STORE=file to force local JSON user storage when DATABASE_URL is set but you want .data/users.json.
  */
 
 var path = require("path");
@@ -49,7 +49,7 @@ if (!adminEmail || adminPass == null || String(adminPass).length === 0) {
   );
 }
 
-app.use(express.json({ limit: "3mb" }));
+app.use(express.json({ limit: "6mb" }));
 
 app.use(function (req, res, next) {
   console.log("[dev-server]", req.method, req.originalUrl || req.url);

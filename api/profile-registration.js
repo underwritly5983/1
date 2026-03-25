@@ -1,15 +1,16 @@
 /**
  * Profile registration: internal notification + email to the registrant with a completion link.
  * Env: same as early-access (SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_EMAIL), plus SITE_URL for links.
- * Saves a profile draft to KV (or local .data/users.json) when storage is available.
+ * Saves a profile draft to Postgres / local file when storage is available.
  * POST body must include profileAccessToken from the early-access confirmation email link.
  */
 
-var nodemailer = require("nodemailer");
 var tokenLib = require("../lib/profile-access-token");
 var completionLib = require("../lib/completion-token");
 var userStore = require("../lib/user-store");
 var submissionsDb = require("../lib/submissions-db");
+var mailer = require("../lib/mailer");
+var earlyAccessReview = require("../lib/early-access-review");
 
 function escapeHtml(s) {
   return String(s)
@@ -48,52 +49,6 @@ function validatePayload(body) {
       submittedAt: typeof body.submittedAt === "string" ? body.submittedAt : new Date().toISOString(),
     },
   };
-}
-
-function createTransport() {
-  var user = (process.env.SMTP_USER || "").trim();
-  var passRaw = process.env.SMTP_PASS || "";
-  var pass = String(passRaw).replace(/\s+/g, "").trim();
-  var host = (process.env.SMTP_HOST || "").trim().toLowerCase();
-
-  if (!user || !pass) {
-    return null;
-  }
-
-  var useGmailPreset =
-    !host || host === "smtp.gmail.com" || process.env.SMTP_USE_GMAIL === "true";
-
-  if (useGmailPreset) {
-    return nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: user,
-        pass: pass,
-      },
-      pool: false,
-      connectionTimeout: 20000,
-      greetingTimeout: 20000,
-      socketTimeout: 20000,
-    });
-  }
-
-  var port = parseInt(process.env.SMTP_PORT || "587", 10);
-  var secureEnv = process.env.SMTP_SECURE;
-  var secure = secureEnv === "true" || secureEnv === "1" || port === 465;
-
-  return nodemailer.createTransport({
-    host: host,
-    port: port,
-    secure: secure,
-    auth: {
-      user: user,
-      pass: pass,
-    },
-    pool: false,
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 20000,
-  });
 }
 
 function readJsonBody(req) {
@@ -154,9 +109,9 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 405, { error: "Method not allowed" });
     }
 
-    var transporter = createTransport();
-    var from = (process.env.MAIL_FROM || "").trim();
-    var notifyTo = (process.env.NOTIFY_EMAIL || "info@underwritly.com").trim();
+    var transporter = mailer.createTransport();
+    var from = mailer.getMailFrom();
+    var notifyTo = mailer.getNotifyEmail();
 
     if (!transporter || !from) {
       return sendJson(res, 503, {
@@ -215,10 +170,17 @@ module.exports = async function handler(req, res) {
     }
 
     var completionTok = completionLib.signCompletionToken(d.email);
-    var completeLink = completionLib.buildCompleteRegistrationEmailLink(completionTok || "");
+    var completeLink = completionLib.buildCompleteRegistrationEmailLink(completionTok || "", req);
+
+    var siteBase = tokenLib.getPublicSiteBaseForEmailFromRequest(req);
+    var adminBackOfficeLine = siteBase
+      ? "Review & approve early access in Back office: " + siteBase + "/admin.html"
+      : "Review & approve early access in Back office (set SITE_URL in env for a direct link).";
 
     var internalText =
-      "New profile registration\n\n" +
+      "New profile registration — action: approve early access in Back office\n\n" +
+      adminBackOfficeLine +
+      "\n\n" +
       "Full name: " +
       d.name +
       "\n" +
@@ -238,6 +200,11 @@ module.exports = async function handler(req, res) {
       d.submittedAt;
 
     var internalHtml =
+      (siteBase
+        ? "<p style=\"background:#fef3c7;padding:12px 14px;border-radius:8px;font-size:14px;margin:0 0 16px;\"><strong>Action required:</strong> Open <a href=\"" +
+          escapeHtml(siteBase + "/admin.html") +
+          "\">Back office</a> to review and approve early access for this registrant.</p>"
+        : "<p style=\"background:#fef3c7;padding:12px 14px;border-radius:8px;font-size:14px;margin:0 0 16px;\"><strong>Action required:</strong> Open Back office to review and approve early access (set SITE_URL in env for a direct link to /admin.html).</p>") +
       "<h2>New profile registration</h2>" +
       "<table style=\"border-collapse:collapse;font-family:sans-serif;font-size:14px;\">" +
       "<tr><td style=\"padding:6px 12px 6px 0;font-weight:600;\">Full name</td><td>" +
@@ -260,7 +227,7 @@ module.exports = async function handler(req, res) {
       "</td></tr>" +
       "</table>";
 
-    var confirmSubject = "You're in — finish your Underwritly account";
+    var confirmSubject = "Profile registered — next: complete your account — Underwritly";
     var firstName = d.name.split(/\s+/)[0];
     var completeParagraphText = completeLink
       ? "To finish setting up your account, open this link (or paste it into your browser). You'll choose a password (required) and can upload your company logo (optional). After that you'll be signed in to your dashboard:\n\n" +
@@ -272,7 +239,7 @@ module.exports = async function handler(req, res) {
       "Hi " +
       firstName +
       ",\n\n" +
-      "Congratulations — your broker profile is set up with Underwritly. We're glad you're here.\n\n" +
+      "Your broker profile has been registered successfully with Underwritly. We're glad you're here.\n\n" +
       completeParagraphText +
       "This link is private; don't forward it. If it expires, reply to this email or write to info@underwritly.com.\n\n" +
       "— The Underwritly team";
@@ -318,6 +285,11 @@ module.exports = async function handler(req, res) {
       });
 
       await submissionsDb.insertProfileRegistration(d);
+      try {
+        await earlyAccessReview.upsertPendingFromProfile(d);
+      } catch (pendingErr) {
+        console.error("[profile-registration] upsertPendingFromProfile", pendingErr && pendingErr.message);
+      }
     } catch (err) {
       console.error("[profile-registration] sendMail", err && err.message, err && err.code, err);
       return sendJson(res, 502, {

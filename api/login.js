@@ -1,10 +1,15 @@
 /**
- * POST { email, password } — sets session cookie.
+ * POST login { email, password } — sets session cookie.
+ * POST forgot_password { action: "forgot_password", email } — sends reset email.
+ * POST reset_password { action: "reset_password", resetToken, password } — updates password.
  */
 
 var passwordLib = require("../lib/password");
 var sessionLib = require("../lib/session-token");
 var userStore = require("../lib/user-store");
+var profileAccess = require("../lib/profile-access-token");
+var resetTokenLib = require("../lib/password-reset-token");
+var mailer = require("../lib/mailer");
 
 function sendJson(res, status, obj, extraHeaders) {
   if (extraHeaders && typeof extraHeaders === "object") {
@@ -76,8 +81,96 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    var action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "login";
     var email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     var pw = typeof body.password === "string" ? body.password : "";
+
+    if (action === "forgot_password") {
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return sendJson(res, 400, { error: "Enter a valid email address." });
+      }
+      try {
+        var maybeUser = await userStore.getUser(email);
+        if (maybeUser && maybeUser.passwordHash) {
+          var tok = resetTokenLib.signPasswordResetToken(email);
+          var base = profileAccess.getPublicSiteBaseForEmailFromRequest(req);
+          var link =
+            tok && base
+              ? base + "/reset-password.html?reset_token=" + encodeURIComponent(tok)
+              : "";
+          var transporter = mailer.createTransport();
+          var from = mailer.getMailFrom();
+          if (tok && link && transporter && from) {
+            var first = (maybeUser.name || email).split(/\s+/)[0];
+            await transporter.sendMail({
+              from: from,
+              to: email,
+              replyTo: "info@underwritly.com",
+              subject: "Reset your Underwritly password",
+              text:
+                "Hi " +
+                first +
+                ",\n\nUse this secure link to reset your password:\n\n" +
+                link +
+                "\n\nIf you did not request this, you can ignore this email.\n\n— The Underwritly team",
+              html:
+                "<p>Hi " +
+                first +
+                ",</p><p>Use this secure link to reset your password:</p><p><a href=\"" +
+                link +
+                "\" style=\"display:inline-block;padding:12px 20px;background:#1e40af;color:#fff;text-decoration:none;border-radius:10px;font-weight:600;\">Reset password</a></p><p style=\"font-size:13px;color:#64748b;word-break:break-all;\">" +
+                link +
+                "</p><p>If you did not request this, you can ignore this email.</p><p>— The Underwritly team</p>",
+            });
+            try {
+              transporter.close();
+            } catch (ignore) {}
+          }
+        }
+      } catch (e) {
+        if (!(e && e.code === "STORE_CONFIG")) {
+          console.error("[login] forgot_password", e);
+        }
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        message:
+          "If an account exists for that email, we sent a password reset link. Check your inbox and spam folder.",
+      });
+    }
+
+    if (action === "reset_password") {
+      var tokReset =
+        typeof body.resetToken === "string"
+          ? body.resetToken.trim()
+          : typeof body.token === "string"
+            ? body.token.trim()
+            : "";
+      var verify = resetTokenLib.verifyPasswordResetToken(tokReset);
+      if (!verify.ok) return sendJson(res, 403, { error: verify.error });
+      var pwCheck = passwordLib.validatePasswordStrength(pw);
+      if (!pwCheck.ok) return sendJson(res, 400, { error: pwCheck.error });
+      var existingReset;
+      try {
+        existingReset = await userStore.getUser(verify.email);
+      } catch (e) {
+        if (e && e.code === "STORE_CONFIG") {
+          return sendJson(res, 503, { error: "Account storage is not configured." });
+        }
+        throw e;
+      }
+      if (!existingReset || !existingReset.passwordHash) {
+        return sendJson(res, 404, { error: "Account not found." });
+      }
+      var next = {};
+      Object.keys(existingReset).forEach(function (k) {
+        next[k] = existingReset[k];
+      });
+      next.passwordHash = passwordLib.hashPassword(pw);
+      await userStore.putUser(verify.email, next);
+      return sendJson(res, 200, { ok: true, redirect: "/login.html" });
+    }
+
     if (!email || !pw) {
       return sendJson(res, 400, { error: "Email and password are required." });
     }

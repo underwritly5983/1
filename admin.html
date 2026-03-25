@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
-    <title>Back office — Underwritly (local)</title>
+    <title>Back office — Underwritly</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -63,77 +63,134 @@
       <div id="admin-app" class="hidden">
         <div class="container admin-container">
           <p class="admin-lead">
-            Submissions use <strong>Vercel KV</strong> (Redis) when <code>KV_REST_API_URL</code> /
-            <code>KV_REST_API_TOKEN</code> are set; otherwise locally they use
-            <code>.data/submissions.sqlite</code>. Configure the same KV as user accounts for hosted
-            deployments.
+            Form submissions and accounts are stored in <strong>PostgreSQL</strong> when
+            <code>DATABASE_URL</code> is set (e.g. Neon from Vercel Integrations). Locally, without
+            <code>DATABASE_URL</code>, submissions use <code>.data/submissions.sqlite</code> and user
+            files use <code>.data/users.json</code>.
           </p>
 
-          <section class="admin-section" aria-labelledby="early-access-heading">
-            <h2 id="early-access-heading" class="admin-section-title">Early access requests</h2>
+          <section class="admin-section" aria-labelledby="eaq-heading">
+            <h2 id="eaq-heading" class="admin-section-title">Early access queue</h2>
+            <p class="admin-section-hint">
+              After someone registers their broker profile, they appear here until you approve. Approving
+              sends them an email that early access is granted (requires PostgreSQL
+              <code>DATABASE_URL</code>).
+            </p>
             <div class="admin-table-wrap">
-              <table class="admin-table" id="table-early">
+              <table class="admin-table" id="table-ea-queue">
                 <thead>
                   <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Received</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Phone</th>
-                    <th scope="col">Source</th>
-                    <th scope="col">Usage</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-early"></tbody>
-              </table>
-              <p id="empty-early" class="admin-empty hidden">No rows yet.</p>
-            </div>
-          </section>
-
-          <section class="admin-section" aria-labelledby="profile-heading">
-            <h2 id="profile-heading" class="admin-section-title">Profile registrations</h2>
-            <div class="admin-table-wrap">
-              <table class="admin-table" id="table-profile">
-                <thead>
-                  <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Received</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Company</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Phone</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-profile"></tbody>
-              </table>
-              <p id="empty-profile" class="admin-empty hidden">No rows yet.</p>
-            </div>
-          </section>
-
-          <section class="admin-section" aria-labelledby="acct-heading">
-            <h2 id="acct-heading" class="admin-section-title">Account completions</h2>
-            <p class="admin-section-hint">Users who finished password + optional logo setup.</p>
-            <div class="admin-table-wrap">
-              <table class="admin-table" id="table-acct">
-                <thead>
-                  <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Received</th>
+                    <th scope="col">Profile submitted</th>
                     <th scope="col">Email</th>
                     <th scope="col">Name</th>
                     <th scope="col">Company</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-ea-queue"></tbody>
+              </table>
+              <p id="empty-ea-queue" class="admin-empty hidden">No pending approvals.</p>
+            </div>
+          </section>
+
+          <section class="admin-section admin-inbox-section" aria-labelledby="inbox-heading">
+            <h2 id="inbox-heading" class="admin-section-title">Form submissions</h2>
+            <p class="admin-section-hint">
+              Inbox (newest first). Use filters like a form plugin — open an entry to see all fields.
+            </p>
+            <div class="admin-inbox-toolbar">
+              <p class="admin-stats" id="admin-submission-stats" aria-live="polite"></p>
+              <div class="admin-filters" role="tablist" aria-label="Filter by form">
+                <button type="button" class="admin-filter active" data-filter="all" role="tab">
+                  All
+                </button>
+                <button type="button" class="admin-filter" data-filter="early_access" role="tab">
+                  Early access
+                </button>
+                <button type="button" class="admin-filter" data-filter="profile_registration" role="tab">
+                  Profile registration
+                </button>
+                <button type="button" class="admin-filter" data-filter="account_completion" role="tab">
+                  Account completion
+                </button>
+              </div>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-table admin-inbox-table" id="table-inbox">
+                <thead>
+                  <tr>
+                    <th scope="col">Received</th>
+                    <th scope="col">Form</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Name</th>
+                    <th scope="col"><span class="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-inbox"></tbody>
+              </table>
+              <p id="empty-inbox" class="admin-empty hidden">No submissions yet.</p>
+            </div>
+          </section>
+
+          <section class="admin-section" aria-labelledby="users-heading">
+            <h2 id="users-heading" class="admin-section-title">Registered users</h2>
+            <p class="admin-section-hint">
+              Accounts that finished password setup. <strong>App role</strong> is for your internal
+              access control (e.g. admin, member); it is separate from the job title on the profile
+              form. Set <strong>Primary</strong> for the main company account; set <strong>Sub-user</strong>
+              and the primary user’s email to link a teammate. Use permissions JSON (e.g.
+              <code>{"ifta":true}</code>) to grant feature flags without using the IFTA checkbox.
+              <strong>Delete</strong> removes the account, profile draft, early-access queue row, and that
+              user’s insured records (PostgreSQL).
+            </p>
+            <div class="admin-table-wrap">
+              <table class="admin-table" id="table-users">
+                <thead>
+                  <tr>
+                    <th scope="col">Email</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Job title</th>
+                    <th scope="col">Account</th>
+                    <th scope="col">Primary email</th>
+                    <th scope="col">Permissions</th>
+                    <th scope="col">App role</th>
+                    <th scope="col">IFTA deployment</th>
                     <th scope="col">Completed</th>
+                    <th scope="col">Actions</th>
                   </tr>
                 </thead>
-                <tbody id="tbody-acct"></tbody>
+                <tbody id="tbody-users"></tbody>
               </table>
-              <p id="empty-acct" class="admin-empty hidden">No rows yet.</p>
+              <p id="empty-users" class="admin-empty hidden">No registered users yet.</p>
             </div>
           </section>
         </div>
       </div>
     </main>
+
+    <div
+      id="admin-entry-modal"
+      class="admin-modal hidden"
+      aria-hidden="true"
+      role="presentation"
+    >
+      <div class="admin-modal-backdrop" id="admin-modal-backdrop" tabindex="-1"></div>
+      <div
+        class="admin-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-modal-title"
+      >
+        <header class="admin-modal-header">
+          <h2 id="admin-modal-title" class="admin-modal-title">Entry</h2>
+          <button type="button" class="btn btn-ghost admin-modal-close" id="admin-modal-close">
+            Close
+          </button>
+        </header>
+        <div class="admin-modal-body" id="admin-modal-body"></div>
+      </div>
+    </div>
 
     <footer class="site-footer">
       <div class="container footer-inner">

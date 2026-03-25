@@ -70,9 +70,36 @@
             </div>
 
             <p class="field-error form-submit-error hidden" id="login-form-error" role="alert"></p>
+            <p class="form-inline-link">
+              <a href="#" id="forgot-password-link">Forgot your password?</a>
+            </p>
             <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn">
               Sign in
             </button>
+          </form>
+          <form class="access-form hidden" id="forgot-password-form" novalidate>
+            <div class="form-row">
+              <label for="forgot-email">Work email</label>
+              <input
+                type="email"
+                id="forgot-email"
+                name="email"
+                autocomplete="email"
+                required
+                placeholder="name@firm.com"
+              />
+              <p class="field-error" id="forgot-email-error" role="alert"></p>
+            </div>
+            <p class="field-hint">
+              We will email a secure link to reset your password.
+            </p>
+            <p class="field-error form-submit-error hidden" id="forgot-form-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="forgot-submit-btn">
+              Send reset link
+            </button>
+            <p class="form-inline-link">
+              <a href="#" id="back-to-login-link">Back to sign in</a>
+            </p>
           </form>
         </div>
       </section>

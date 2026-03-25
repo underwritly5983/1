@@ -1,8 +1,13 @@
 (function () {
   var form = document.getElementById("login-form");
+  var forgotForm = document.getElementById("forgot-password-form");
   var submitBtn = document.getElementById("login-submit-btn");
+  var forgotSubmitBtn = document.getElementById("forgot-submit-btn");
   var formError = document.getElementById("login-form-error");
+  var forgotError = document.getElementById("forgot-form-error");
   var yearEl = document.getElementById("year");
+  var forgotLink = document.getElementById("forgot-password-link");
+  var backToLoginLink = document.getElementById("back-to-login-link");
 
   if (yearEl) {
     yearEl.textContent = String(new Date().getFullYear());
@@ -18,6 +23,16 @@
     });
   }
 
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "ok" && formError) {
+      formError.textContent = "Password updated. You can sign in now.";
+      formError.classList.remove("hidden");
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
   function clearErrors() {
     ["login-email", "login-password"].forEach(function (id) {
       var el = document.getElementById(id + "-error");
@@ -27,6 +42,22 @@
       formError.textContent = "";
       formError.classList.add("hidden");
     }
+  }
+
+  function clearForgotErrors() {
+    var e = document.getElementById("forgot-email-error");
+    if (e) e.textContent = "";
+    if (forgotError) {
+      forgotError.textContent = "";
+      forgotError.classList.add("hidden");
+    }
+  }
+
+  function showForgotPanel(show) {
+    if (form) form.classList.toggle("hidden", !!show);
+    if (forgotForm) forgotForm.classList.toggle("hidden", !show);
+    clearErrors();
+    clearForgotErrors();
   }
 
   if (form) {
@@ -106,6 +137,85 @@
           if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = "Sign in";
+          }
+        });
+    });
+  }
+
+  if (forgotLink) {
+    forgotLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      showForgotPanel(true);
+      var emailEl = document.getElementById("login-email");
+      var forgotEmailEl = document.getElementById("forgot-email");
+      if (emailEl && forgotEmailEl && emailEl.value) forgotEmailEl.value = emailEl.value;
+    });
+  }
+
+  if (backToLoginLink) {
+    backToLoginLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      showForgotPanel(false);
+    });
+  }
+
+  if (forgotForm) {
+    forgotForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearForgotErrors();
+      var emailEl = document.getElementById("forgot-email");
+      var em = (emailEl && emailEl.value.trim()) || "";
+      if (!em) {
+        var e1 = document.getElementById("forgot-email-error");
+        if (e1) e1.textContent = "Email is required.";
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        var e2 = document.getElementById("forgot-email-error");
+        if (e2) e2.textContent = "Enter a valid email address.";
+        return;
+      }
+      if (forgotSubmitBtn) {
+        forgotSubmitBtn.disabled = true;
+        forgotSubmitBtn.textContent = "Sending…";
+      }
+      fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "forgot_password", email: em }),
+      })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            var data = {};
+            if (text) {
+              try {
+                data = JSON.parse(text);
+              } catch (ignore) {}
+            }
+            return { ok: res.ok, data: data };
+          });
+        })
+        .then(function (result) {
+          var msg =
+            (result.data && (result.data.message || result.data.error)) ||
+            "If an account exists for that email, a reset link has been sent.";
+          if (forgotError) {
+            forgotError.textContent = msg;
+            forgotError.classList.remove("hidden");
+          }
+        })
+        .catch(function () {
+          if (forgotError) {
+            forgotError.textContent =
+              "We could not reach the server. Check your connection or email info@underwritly.com.";
+            forgotError.classList.remove("hidden");
+          }
+        })
+        .finally(function () {
+          if (forgotSubmitBtn) {
+            forgotSubmitBtn.disabled = false;
+            forgotSubmitBtn.textContent = "Send reset link";
           }
         });
     });

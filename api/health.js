@@ -25,12 +25,19 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 405, { ok: false, error: "Method not allowed" });
     }
 
-    var hasKv = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+    var hasDatabase = !!(process.env.DATABASE_URL || "").trim();
     var hasSmtp =
       !!(process.env.SMTP_USER && process.env.SMTP_PASS && process.env.MAIL_FROM);
     var hasAdmin =
       !!(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD != null && String(process.env.ADMIN_PASSWORD).length > 0);
-    var hasSiteUrl = !!(process.env.SITE_URL || process.env.PUBLIC_SITE_URL);
+    var explicitSite = (
+      process.env.SITE_URL ||
+      process.env.PUBLIC_SITE_URL ||
+      process.env.EMAIL_SITE_URL ||
+      ""
+    ).trim();
+    var vercelRaw = (process.env.VERCEL_URL || "").trim();
+    var hasSiteUrl = !!explicitSite || !!vercelRaw;
     var hasProfileSecret = !!(process.env.PROFILE_ACCESS_SECRET || "").trim();
     var hasSessionSigning =
       !!(process.env.SESSION_SECRET || "").trim() ||
@@ -49,7 +56,7 @@ module.exports = async function handler(req, res) {
       service: "underwritly-landing",
       runtime: process.env.VERCEL === "1" ? "vercel" : "other",
       checks: {
-        kvStorage: hasKv,
+        databaseUrl: hasDatabase,
         smtpEmail: hasSmtp,
         adminCredentials: hasAdmin,
         siteUrlForEmailLinks: hasSiteUrl,

@@ -9,3 +9,6 @@ node_modules/
 Thumbs.db
 *.log
 body.txt
+
+.vercel
+.env*.local

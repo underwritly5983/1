@@ -14,7 +14,7 @@
       "maxDuration": 10
     },
     "api/session.js": {
-      "maxDuration": 10
+      "maxDuration": 60
     },
     "api/login.js": {
       "maxDuration": 10

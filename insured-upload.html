@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Upload IFTA reports — Underwritly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-register page-dashboard">
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <img
+            src="assets/logo.PNG"
+            alt="Underwritly"
+            width="520"
+            height="134"
+            class="brand-logo"
+            decoding="async"
+          />
+        </a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="profile-registration profile-registration--lead">
+        <div class="container narrow">
+          <div id="insured-upload-flow">
+            <header class="section-head section-head--center">
+              <h2 class="section-title">Upload IFTA reports</h2>
+              <p class="section-sub">
+                Upload up to <strong>8</strong> PDF or CSV files (1.5 MB each; combined total at most 4 MB
+                so the request fits hosting limits). Your broker will receive them in IFTA Summary when
+                integration is enabled.
+              </p>
+            </header>
+
+            <form class="access-form" id="insured-upload-form" novalidate>
+            <div class="form-row">
+              <label for="ifta-files">Files (up to 8 PDFs or CSVs, max 1.5 MB each, 4 MB combined)</label>
+              <input
+                type="file"
+                id="ifta-files"
+                name="files"
+                accept=".pdf,.csv,application/pdf,text/csv"
+                multiple
+                required
+              />
+            </div>
+            <p class="field-error form-submit-error hidden" id="insured-upload-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="insured-upload-submit">
+              Submit reports
+            </button>
+          </form>
+          </div>
+
+          <div id="insured-upload-complete" class="form-success hidden" role="status" aria-live="polite">
+            <h2 class="success-title">Thank you for uploading</h2>
+            <p class="success-body" id="insured-upload-complete-body">
+              Your IFTA reports were received. Your broker has been sent the files and will see them in
+              IFTA Summary.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>© <span id="year"></span> Underwritly. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script src="insured-upload-page.js"></script>
+  </body>
+</html>

@@ -3,7 +3,7 @@
   "private": true,
   "description": "Underwritly marketing landing page",
   "dependencies": {
-    "@vercel/kv": "^3.0.0",
+    "@neondatabase/serverless": "^0.10.4",
     "better-sqlite3": "^12.8.0",
     "nodemailer": "^8.0.3"
   },
@@ -11,7 +11,10 @@
     "start": "node dev-server.js",
     "dev": "node dev-server.js",
     "start:static": "npx --yes serve -l 3456 .",
-    "deploy": "vercel --prod",
+    "deploy": "node scripts/deploy-vercel-all.js",
+    "deploy:landing": "vercel deploy --prod --yes",
+    "deploy:ifta": "node scripts/deploy-vercel-ifta.js",
+    "db:verify": "node scripts/verify-database.js",
     "vercel:env": "node scripts/generate-vercel-env.js"
   },
   "devDependencies": {

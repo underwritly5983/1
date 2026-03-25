@@ -11,13 +11,13 @@
  *   MAIL_FROM — required; should match SMTP_USER for Gmail (e.g. "Name <you@gmail.com>")
  *   NOTIFY_EMAIL — optional, defaults to info@underwritly.com
  *   PROFILE_ACCESS_SECRET — required for the profile registration link in the confirmation email
- *   SITE_URL or PUBLIC_SITE_URL — required for the profile link in confirmation email (never uses VERCEL_URL in email)
+ *   SITE_URL / PUBLIC_SITE_URL / EMAIL_SITE_URL — preferred for links; otherwise VERCEL_URL or the request Host header is used
  *   PROFILE_ACCESS_TTL_SECONDS — optional, default 30 days
  */
 
-var nodemailer = require("nodemailer");
 var profileAccess = require("../lib/profile-access-token");
 var submissionsDb = require("../lib/submissions-db");
+var mailer = require("../lib/mailer");
 
 var SOURCE_LABELS = {
   search: "Search engine",
@@ -64,56 +64,6 @@ function validatePayload(body) {
       submittedAt: typeof body.submittedAt === "string" ? body.submittedAt : new Date().toISOString(),
     },
   };
-}
-
-/**
- * Gmail: use built-in "gmail" service (correct host/port/TLS).
- * Other hosts: explicit SMTP_* from env.
- */
-function createTransport() {
-  var user = (process.env.SMTP_USER || "").trim();
-  var passRaw = process.env.SMTP_PASS || "";
-  var pass = String(passRaw).replace(/\s+/g, "").trim();
-  var host = (process.env.SMTP_HOST || "").trim().toLowerCase();
-
-  if (!user || !pass) {
-    return null;
-  }
-
-  var useGmailPreset =
-    !host || host === "smtp.gmail.com" || process.env.SMTP_USE_GMAIL === "true";
-
-  if (useGmailPreset) {
-    return nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: user,
-        pass: pass,
-      },
-      pool: false,
-      connectionTimeout: 20000,
-      greetingTimeout: 20000,
-      socketTimeout: 20000,
-    });
-  }
-
-  var port = parseInt(process.env.SMTP_PORT || "587", 10);
-  var secureEnv = process.env.SMTP_SECURE;
-  var secure = secureEnv === "true" || secureEnv === "1" || port === 465;
-
-  return nodemailer.createTransport({
-    host: host,
-    port: port,
-    secure: secure,
-    auth: {
-      user: user,
-      pass: pass,
-    },
-    pool: false,
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 20000,
-  });
 }
 
 function readJsonBody(req) {
@@ -174,9 +124,9 @@ module.exports = async function handler(req, res) {
       return sendJson(res, 405, { error: "Method not allowed" });
     }
 
-    var transporter = createTransport();
-    var from = (process.env.MAIL_FROM || "").trim();
-    var notifyTo = (process.env.NOTIFY_EMAIL || "info@underwritly.com").trim();
+    var transporter = mailer.createTransport();
+    var from = mailer.getMailFrom();
+    var notifyTo = mailer.getNotifyEmail();
 
     if (!transporter || !from) {
       return sendJson(res, 503, {
@@ -254,12 +204,12 @@ module.exports = async function handler(req, res) {
       "</table>";
 
     var profileToken = profileAccess.signProfileAccessToken(d.email);
-    var profileLink = profileToken ? profileAccess.buildProfileRegistrationEmailLink(profileToken) : "";
+    var profileLink = profileAccess.buildProfileRegistrationEmailLinkFromRequest(profileToken, req);
     if (!profileAccess.hasSigningSecret()) {
       console.warn("[early-access] PROFILE_ACCESS_SECRET is not set; confirmation email will not include a profile registration link.");
     } else if (profileToken && !profileLink) {
       console.warn(
-        "[early-access] SITE_URL or PUBLIC_SITE_URL is not set — confirmation email cannot include a profile link (deployment URLs are not used in customer email). Set SITE_URL to your public site, e.g. https://yourdomain.com"
+        "[early-access] Could not build a profile registration URL. Set SITE_URL, PUBLIC_SITE_URL, or EMAIL_SITE_URL to your public origin, or ensure VERCEL_URL is an https URL. PROFILE_ACCESS_SECRET is set but the confirmation email will not include a clickable link."
       );
     }
 
@@ -275,7 +225,10 @@ module.exports = async function handler(req, res) {
         "It only works for this email address—please do not forward it.</p>" +
         "<p><a href=\"" +
         escapeHtml(profileLink) +
-        "\" style=\"display:inline-block;padding:12px 20px;background:#059669;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;\">Register your profile</a></p>";
+        "\" style=\"display:inline-block;padding:12px 20px;background:#059669;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;\">Register your profile</a></p>" +
+        "<p style=\"font-size:13px;color:#64748b;word-break:break-all;\">If the button does not work, copy this link into your browser:<br/>" +
+        escapeHtml(profileLink) +
+        "</p>";
     } else if (profileToken && profileAccess.hasSigningSecret()) {
       registerBlurbText =
         "\n\nWe will follow up with a secure link to complete your broker profile.\n";
@@ -283,7 +236,9 @@ module.exports = async function handler(req, res) {
         "<p><strong>Next step:</strong> we will follow up with a secure link to complete your broker profile.</p>";
     }
 
-    var confirmSubject = "We received your early access request — Underwritly";
+    var confirmSubject = profileLink
+      ? "Early access confirmed — register your profile — Underwritly"
+      : "We received your early access request — Underwritly";
     var confirmText =
       "Hi " +
       d.name.split(/\s+/)[0] +
@@ -314,20 +269,20 @@ module.exports = async function handler(req, res) {
     try {
       await transporter.sendMail({
         from: from,
-        to: notifyTo,
-        replyTo: d.email,
-        subject: "Early access request: " + d.name,
-        text: internalText,
-        html: internalHtml,
-      });
-
-      await transporter.sendMail({
-        from: from,
         to: d.email,
         replyTo: "info@underwritly.com",
         subject: confirmSubject,
         text: confirmText,
         html: confirmHtml,
+      });
+
+      await transporter.sendMail({
+        from: from,
+        to: notifyTo,
+        replyTo: d.email,
+        subject: "Early access request: " + d.name,
+        text: internalText,
+        html: internalHtml,
       });
 
       await submissionsDb.insertEarlyAccess(d);

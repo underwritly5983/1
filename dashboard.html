@@ -90,6 +90,118 @@
                   <dd id="dashboard-phone">—</dd>
                 </div>
               </dl>
+              <div class="dashboard-insureds" id="dashboard-insureds-block">
+                <h3 class="dashboard-subtitle">Insured clients</h3>
+                <p class="dashboard-meta dashboard-insureds-lead">
+                  Add an insured contact to send them a secure code, then have them upload IFTA reports for
+                  your company. After files are received, use the <strong>IFTA</strong> button on that
+                  insured’s row to open IFTA Summary with their documents (not the large IFTA card below).
+                </p>
+                <p class="dashboard-actions">
+                  <a class="btn btn-primary" href="/create-insured.html">Create an Insured</a>
+                </p>
+                <div id="insureds-loading" class="dashboard-meta hidden">Loading insured list…</div>
+                <p id="insureds-error" class="field-error hidden" role="alert"></p>
+                <div id="insureds-table-wrap" class="dashboard-insureds-table-wrap hidden">
+                  <table class="dashboard-insureds-table" aria-label="Insured clients">
+                    <thead>
+                      <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Files</th>
+                        <th scope="col">IFTA Summary</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="insureds-tbody"></tbody>
+                  </table>
+                </div>
+                <p id="insureds-empty" class="dashboard-meta hidden">No insured clients yet.</p>
+              </div>
+              <div class="dashboard-ifta" id="dashboard-ifta-locked">
+                <p class="dashboard-meta">
+                  IFTA Summary access is currently disabled for your account. Your admin can enable
+                  the IFTA deployment flag or grant the <code>ifta</code> permission for your profile.
+                </p>
+              </div>
+              <div class="dashboard-ifta hidden" id="dashboard-ifta-allowed">
+                <p class="dashboard-meta dashboard-ifta-kicker">Fuel tax &amp; mileage reporting</p>
+                <button type="button" class="dashboard-ifta-launch" id="dashboard-ifta-open">
+                  <span class="dashboard-ifta-launch-graphic" aria-hidden="true">
+                    <svg
+                      class="dashboard-ifta-launch-svg"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 96 72"
+                      fill="none"
+                    >
+                      <line
+                        x1="4"
+                        y1="60"
+                        x2="92"
+                        y2="60"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        opacity="0.3"
+                      />
+                      <rect
+                        x="32"
+                        y="54"
+                        width="32"
+                        height="7"
+                        rx="2"
+                        fill="currentColor"
+                        opacity="0.45"
+                      />
+                      <rect
+                        x="34"
+                        y="22"
+                        width="28"
+                        height="34"
+                        rx="5"
+                        fill="currentColor"
+                        opacity="0.93"
+                      />
+                      <rect
+                        x="32"
+                        y="12"
+                        width="32"
+                        height="14"
+                        rx="4"
+                        fill="currentColor"
+                        opacity="0.92"
+                      />
+                      <rect
+                        x="40"
+                        y="16"
+                        width="16"
+                        height="6"
+                        rx="2"
+                        fill="#fff"
+                        opacity="0.42"
+                      />
+                      <path
+                        d="M62 36c12 0 18 8 18 16v6"
+                        stroke="currentColor"
+                        stroke-width="3.2"
+                        fill="none"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        opacity="0.95"
+                      />
+                      <path
+                        d="M80 58l8-2 2 8-10 2.5z"
+                        fill="currentColor"
+                        opacity="0.95"
+                      />
+                      <circle cx="48" cy="42" r="3" fill="#fff" opacity="0.2" />
+                    </svg>
+                  </span>
+                  <span class="dashboard-ifta-launch-label">IFTA Summary</span>
+                </button>
+                <p class="dashboard-meta dashboard-ifta-hint hidden" id="dashboard-ifta-launch-err"></p>
+              </div>
             </div>
           </div>
         </div>

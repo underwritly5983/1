@@ -7,6 +7,7 @@ var passwordLib = require("../lib/password");
 var sessionLib = require("../lib/session-token");
 var userStore = require("../lib/user-store");
 var submissionsDb = require("../lib/submissions-db");
+var companyKeyLib = require("../lib/company-key");
 
 var LOGO_MAX_BYTES = 256 * 1024;
 var ALLOWED_MIME = { "image/png": true, "image/jpeg": true, "image/webp": true };
@@ -117,7 +118,7 @@ module.exports = async function handler(req, res) {
       if (e && e.code === "STORE_CONFIG") {
         return sendJson(res, 503, {
           error:
-            "Account storage is not configured. Add Vercel KV (KV_REST_API_URL and KV_REST_API_TOKEN) in project settings.",
+            "Account storage is not configured. Set DATABASE_URL (PostgreSQL, e.g. Neon) in project settings.",
         });
       }
       throw e;
@@ -155,6 +156,12 @@ module.exports = async function handler(req, res) {
       passwordHash: passwordLib.hashPassword(pw),
       logoDataUrl: logoDataUrl,
       completedAt: new Date().toISOString(),
+      appRole: "",
+      iftaAccess: false,
+      companyKey: companyKeyLib.normalizeCompanyKey(company, email),
+      accountType: "primary",
+      primaryEmail: "",
+      permissions: {},
     };
 
     await userStore.putUser(email, record);
