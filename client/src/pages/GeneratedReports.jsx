@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { FileText } from 'lucide-react'
 import JurisdictionReportLoader from '../components/JurisdictionReportLoader'
 import SourceUploadFileRow from '../components/SourceUploadFileRow'
+import { AppLogo } from '../components/AppLogo'
 
 const GeneratedReports = () => {
   const [reports, setReports] = useState([])
@@ -198,7 +198,7 @@ const GeneratedReports = () => {
 
       {!selectedReportId && reports.length > 0 && (
         <div className="card text-center py-12 text-gray-600">
-          <FileText className="h-14 w-14 mx-auto mb-3 text-gray-300" />
+          <AppLogo variant="hero" className="mx-auto mb-3" />
           <p className="font-medium text-gray-900">Loading summary…</p>
           <p className="text-sm mt-1">Please wait a moment.</p>
         </div>
@@ -206,7 +206,7 @@ const GeneratedReports = () => {
 
       {!selectedReportId && reports.length === 0 && (
         <div className="card text-center py-12 text-gray-600">
-          <FileText className="h-14 w-14 mx-auto mb-3 text-gray-300" />
+          <AppLogo variant="hero" className="mx-auto mb-3" />
           <p className="font-medium text-gray-900">No generated reports yet</p>
           <p className="text-sm mt-1">Upload your Notice of Assessment PDFs to build a summary.</p>
         </div>

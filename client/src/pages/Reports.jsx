@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { FileText, Upload, Trash2, Download, AlertCircle, CheckCircle, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
+import { AppLogo } from '../components/AppLogo'
 
 const Reports = () => {
   const { user, loading: authLoading } = useAuth()
@@ -164,7 +165,7 @@ const Reports = () => {
 
       {reports.length === 0 ? (
         <div className="card text-center py-12">
-          <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+          <AppLogo variant="hero" className="mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No reports yet</h3>
           <p className="text-gray-600 mb-6">Upload your first IFTA report to get started</p>
           <Link to="/reports/upload" className="btn-primary inline-flex items-center">

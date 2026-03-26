@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { FileText, CheckCircle, Loader } from 'lucide-react'
+import { AppLogo } from '../components/AppLogo'
 
 const GenerateReport = () => {
   const location = useLocation()
@@ -87,7 +88,7 @@ const GenerateReport = () => {
           
           {availableReports.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <AppLogo variant="hero" className="mx-auto mb-3" />
               <p>No completed reports available</p>
             </div>
           ) : (

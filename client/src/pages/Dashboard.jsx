@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { FileText, Upload, TrendingUp, Clock, AlertCircle, ArrowRight, Crown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { AppLogo } from '../components/AppLogo'
 
 const Dashboard = () => {
   const { user } = useAuth()
@@ -175,7 +176,7 @@ const Dashboard = () => {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Reports</h2>
           {stats.recentReports.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <AppLogo variant="hero" className="mx-auto mb-3" />
               <p>No reports yet</p>
               <Link to="/reports/upload" className="text-primary-600 hover:text-primary-700 mt-2 inline-block">
                 Upload your first report

@@ -439,8 +439,6 @@ const JurisdictionReportContent = ({
 
   return (
     <div className={`${embedded ? 'space-y-6 overflow-x-hidden' : 'space-y-10'} w-full min-w-0 max-w-full ${embedPad}`}>
-      {renderSourceFilesCard()}
-
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="flex items-start space-x-4 min-w-0">
           {showBackButton && onBack && (
@@ -705,25 +703,28 @@ const JurisdictionReportContent = ({
             </p>
           )}
         </div>
-        <div className="card min-w-0 max-w-full overflow-hidden">
-          <h3 className="text-lg font-semibold text-gray-900 mb-5">Top 15 Jurisdictions</h3>
-          <div className="overflow-x-auto w-full min-w-0">
-            <table className="w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">%</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {top15.map((j, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-2.5 font-medium text-gray-900">{j.code}</td>
-                    <td className="px-3 py-2.5 text-right text-primary-600 tabular-nums">{j.percentage.toFixed(2)}%</td>
+        <div className="space-y-6">
+          {renderSourceFilesCard()}
+          <div className="card min-w-0 max-w-full overflow-hidden">
+            <h3 className="text-lg font-semibold text-gray-900 mb-5">Top 15 Jurisdictions</h3>
+            <div className="overflow-x-auto w-full min-w-0">
+              <table className="w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">%</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {top15.map((j, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 font-medium text-gray-900">{j.code}</td>
+                      <td className="px-3 py-2.5 text-right text-primary-600 tabular-nums">{j.percentage.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
