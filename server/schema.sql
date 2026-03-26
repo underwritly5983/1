@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS ifta_reports (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Optional durable storage for source PDFs.
+-- On Vercel, /tmp files are ephemeral, so file_path may disappear between requests.
+-- Storing the PDF bytes allows serving and merging source PDFs reliably.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'ifta_reports' AND column_name = 'file_blob'
+  ) THEN
+    ALTER TABLE ifta_reports ADD COLUMN file_blob BYTEA;
+  END IF;
+END $$;
+
 -- Generated Reports table
 CREATE TABLE IF NOT EXISTS generated_reports (
   id SERIAL PRIMARY KEY,

@@ -266,6 +266,7 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
         const filePath = file.path;
         const fileName = file.originalname;
         const fileSize = file.size;
+        const fileBytes = fs.readFileSync(filePath);
 
         // Parse PDF
         console.log(`Parsing PDF: ${filePath}`);
@@ -286,8 +287,8 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
           : pdfData.text;
 
         const result = await db.query(
-          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status, file_blob)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id, quarter_label, year, detected_date, status`,
           [
             req.user.id,
@@ -299,7 +300,8 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
             quarterInfo.quarter,
             quarterInfo.detectedDate,
             rawTextToStore,
-            'processing'
+            'processing',
+            fileBytes,
           ]
         );
 
@@ -549,6 +551,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     const filePath = req.file.path;
     const fileName = req.file.originalname;
     const fileSize = req.file.size;
+    const fileBytes = fs.readFileSync(filePath);
 
     // Parse PDF
     const pdfData = await parsePDF(filePath);
@@ -568,8 +571,8 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
       : pdfData.text;
 
     const result = await db.query(
-      `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status, file_blob)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id, quarter_label, year, detected_date, status`,
       [
         req.user.id,
@@ -581,7 +584,8 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
         quarterInfo.quarter,
         quarterInfo.detectedDate,
         rawTextToStore,
-        'processing'
+        'processing',
+        fileBytes,
       ]
     );
 
@@ -708,7 +712,7 @@ router.get('/source-file/:id', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Invalid file id' });
     }
     const result = await db.query(
-      'SELECT file_path, file_name FROM ifta_reports WHERE id = $1 AND user_id = $2',
+      'SELECT file_path, file_name, file_blob FROM ifta_reports WHERE id = $1 AND user_id = $2',
       [id, req.user.id]
     );
     if (result.rows.length === 0) {
@@ -718,7 +722,16 @@ router.get('/source-file/:id', authenticate, async (req, res) => {
         userId: req.user?.id ?? null
       });
     }
-    const { file_path: storedPath, file_name: fileName } = result.rows[0];
+    const { file_path: storedPath, file_name: fileName, file_blob: fileBlob } = result.rows[0];
+
+    // Prefer DB-stored bytes (durable on Vercel); fall back to disk.
+    if (fileBlob && (Buffer.isBuffer(fileBlob) || fileBlob instanceof Uint8Array)) {
+      const buf = Buffer.from(fileBlob);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${String(fileName || 'notice.pdf').replace(/"/g, '')}"`);
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      return res.send(buf);
+    }
     const absPath = resolveStoredUploadPath(storedPath);
     const uploadRoot = getUploadsRoot();
     const base = storedPath ? path.basename(String(storedPath).replace(/\\/g, '/')) : '';
@@ -739,10 +752,20 @@ router.get('/source-file/:id', authenticate, async (req, res) => {
       });
     }
     const downloadName = (fileName && String(fileName).trim()) || path.basename(absPath) || 'notice.pdf';
+    // Read once so we can opportunistically persist into file_blob for future requests.
+    const bytes = fs.readFileSync(absPath);
+    try {
+      await db.query(
+        'UPDATE ifta_reports SET file_blob = $1 WHERE id = $2 AND user_id = $3',
+        [bytes, id, req.user.id]
+      );
+    } catch (_) {
+      // Non-fatal: file may still be served from disk.
+    }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${downloadName.replace(/"/g, '')}"`);
     res.setHeader('Cache-Control', 'private, max-age=60');
-    return res.sendFile(path.resolve(absPath));
+    return res.send(bytes);
   } catch (error) {
     console.error('source-file error:', error);
     return res.status(500).json({ error: 'Failed to open file' });
@@ -1214,9 +1237,10 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
 
     if (sourceReportIds.length > 0) {
       const sourceResult = await db.query(
-        `SELECT id, file_path, file_name, year, quarter_label, detected_date
+        `SELECT id, file_path, file_blob, file_name, year, quarter_label, detected_date
          FROM ifta_reports
-         WHERE id = ANY($1::int[]) AND user_id = $2 AND file_path IS NOT NULL AND file_path != ''`,
+         WHERE id = ANY($1::int[]) AND user_id = $2
+           AND (file_blob IS NOT NULL OR (file_path IS NOT NULL AND file_path != ''))`,
         [sourceReportIds, req.user.id]
       );
 
@@ -1285,10 +1309,15 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
 
         // 3) Append each source PDF in chronological order (on subsequent pages)
         for (const row of sourceResult.rows) {
-          const filePath = resolveStoredUploadPath(row.file_path);
-          if (!filePath || !fs.existsSync(filePath)) continue;
           try {
-            const bytes = fs.readFileSync(filePath);
+            const bytes = row.file_blob
+              ? Buffer.from(row.file_blob)
+              : (() => {
+                  const filePath = resolveStoredUploadPath(row.file_path);
+                  if (!filePath || !fs.existsSync(filePath)) return null;
+                  return fs.readFileSync(filePath);
+                })();
+            if (!bytes) continue;
             const doc = await PDFDocument.load(bytes);
             const pageCount = doc.getPageCount();
             const indices = Array.from({ length: pageCount }, (_, i) => i);

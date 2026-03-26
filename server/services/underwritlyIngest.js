@@ -92,8 +92,8 @@ async function processUnderwritlyIngestWebhook(body) {
           pdfData.text.length > 2000000 ? pdfData.text.substring(0, 2000000) : pdfData.text;
 
         const result = await db.query(
-          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status, file_blob)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
             userId,
@@ -106,6 +106,7 @@ async function processUnderwritlyIngestWebhook(body) {
             quarterInfo.detectedDate,
             rawTextToStore,
             'processing',
+            buf,
           ]
         );
         const reportId = result.rows[0].id;
@@ -124,10 +125,10 @@ async function processUnderwritlyIngestWebhook(body) {
       } else {
         const raw = buf.toString('utf8');
         const result = await db.query(
-          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status, file_blob)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
-          [userId, name, filePath, buf.length, null, null, null, null, raw.substring(0, 2000000), 'completed']
+          [userId, name, filePath, buf.length, null, null, null, null, raw.substring(0, 2000000), 'completed', buf]
         );
         reportIds.push(result.rows[0].id);
       }
