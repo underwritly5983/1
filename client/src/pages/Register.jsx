@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { FileText, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
+import { AppLogo } from '../components/AppLogo'
 import { useDropzone } from 'react-dropzone'
 
 const Register = () => {
@@ -65,8 +66,8 @@ const Register = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 bg-primary-600 rounded-2xl mb-4">
-            <FileText className="h-8 w-8 text-white" />
+          <div className="mb-6">
+            <AppLogo variant="auth" />
           </div>
           <h2 className="text-3xl font-bold text-gray-900">Create your account</h2>
           <p className="mt-2 text-gray-600">Start processing IFTA reports in minutes</p>

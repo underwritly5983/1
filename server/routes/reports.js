@@ -10,7 +10,7 @@ const { generateReport, generateTemplateExcel } = require('../services/reportGen
 const { generateSummaryPDF } = require('../services/pdfGenerator');
 const { generateReportPrintPdf } = require('../services/reportPrintPdfService');
 const { PDFDocument, StandardFonts } = require('pdf-lib');
-const { getUploadsRoot } = require('../lib/uploadPaths');
+const { getUploadsRoot, resolveStoredUploadPath } = require('../lib/uploadPaths');
 
 const router = express.Router();
 
@@ -19,14 +19,10 @@ function getGeneratedReportName(companyName) {
   return `${String(companyName || 'Company').trim()} IFTA Summary`;
 }
 
-/** Turn stored disk path into URL path served by express.static('/uploads') */
-function publicUploadPathFromStoredPath(storedPath) {
-  if (!storedPath) return null;
-  const normalized = path.resolve(storedPath).replace(/\\/g, '/');
-  const lower = normalized.toLowerCase();
-  const idx = lower.indexOf('/uploads/');
-  if (idx >= 0) return normalized.slice(idx);
-  return `/uploads/reports/${path.basename(storedPath)}`;
+/** Authenticated download URL (works on Vercel; raw /uploads/* is not reliably served). */
+function sourceFileViewUrl(reportId) {
+  if (reportId == null) return null;
+  return `/api/reports/source-file/${reportId}`;
 }
 
 function rowToSourceFileRow(r) {
@@ -35,7 +31,7 @@ function rowToSourceFileRow(r) {
     fileName: r.file_name,
     quarter: r.quarter_label,
     year: r.year,
-    viewUrl: publicUploadPathFromStoredPath(r.file_path)
+    viewUrl: sourceFileViewUrl(r.id)
   };
 }
 
@@ -440,7 +436,7 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
           fs.writeFileSync(pdfPath, pdfBuffer);
 
           // Check if a report for today already exists, update it instead of creating new
-          const reportName = getGeneratedReportName(reportData.companyName || user.company_name);
+          const reportName = getGeneratedReportName(user.company_name);
 
           // Check for existing report from today
           const existingReport = await db.query(
@@ -681,11 +677,12 @@ const deleteBatchHandler = async (req, res) => {
     );
 
     for (const row of result.rows) {
-      if (row.file_path && fs.existsSync(row.file_path)) {
+      const resolved = resolveStoredUploadPath(row.file_path);
+      if (resolved && fs.existsSync(resolved)) {
         try {
-          fs.unlinkSync(row.file_path);
+          fs.unlinkSync(resolved);
         } catch (e) {
-          console.warn('Could not delete file:', row.file_path, e.message);
+          console.warn('Could not delete file:', resolved, e.message);
         }
       }
     }
@@ -699,6 +696,58 @@ const deleteBatchHandler = async (req, res) => {
   }
 };
 router.delete('/', authenticate, deleteBatchHandler);
+
+/**
+ * Stream an uploaded Notice of Assessment PDF (session cookie).
+ * Required for Vercel: raw /uploads/* URLs do not reach Express static reliably.
+ */
+router.get('/source-file/:id', authenticate, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid file id' });
+    }
+    const result = await db.query(
+      'SELECT file_path, file_name FROM ifta_reports WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'File not found',
+        fileId: id,
+        userId: req.user?.id ?? null
+      });
+    }
+    const { file_path: storedPath, file_name: fileName } = result.rows[0];
+    const absPath = resolveStoredUploadPath(storedPath);
+    const uploadRoot = getUploadsRoot();
+    const base = storedPath ? path.basename(String(storedPath).replace(/\\/g, '/')) : '';
+    const candidates = base
+      ? [path.join(uploadRoot, 'reports', base), path.join(uploadRoot, base)]
+      : [];
+    const exists = !!(absPath && fs.existsSync(absPath));
+    if (!absPath || !exists) {
+      return res.status(404).json({
+        error: 'File is no longer available on the server. Re-upload the PDF if needed.',
+        fileId: id,
+        fileName: fileName || null,
+        storedPath: storedPath || null,
+        resolvedPath: absPath || null,
+        uploadRoot,
+        candidates,
+        exists
+      });
+    }
+    const downloadName = (fileName && String(fileName).trim()) || path.basename(absPath) || 'notice.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${downloadName.replace(/"/g, '')}"`);
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    return res.sendFile(path.resolve(absPath));
+  } catch (error) {
+    console.error('source-file error:', error);
+    return res.status(500).json({ error: 'Failed to open file' });
+  }
+});
 
 // Get single report
 router.get('/:id', authenticate, async (req, res) => {
@@ -776,10 +825,13 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Report not found' });
     }
 
-    // Delete file
-    const filePath = result.rows[0].file_path;
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    const resolved = resolveStoredUploadPath(result.rows[0].file_path);
+    if (resolved && fs.existsSync(resolved)) {
+      try {
+        fs.unlinkSync(resolved);
+      } catch (e) {
+        console.warn('Could not delete file on disk:', e.message);
+      }
     }
 
     // Delete from database
@@ -846,7 +898,7 @@ router.post('/generate-summary', authenticate, async (req, res) => {
     reportData.sourceReportIds = reportIds;
 
     // Check if report with same name exists, update instead of creating new
-    const finalReportName = getGeneratedReportName(reportData.companyName || user.company_name);
+    const finalReportName = getGeneratedReportName(user.company_name);
     const existingReport = await db.query(
       `SELECT id FROM generated_reports 
        WHERE user_id = $1 AND report_name = $2 
@@ -1145,11 +1197,22 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
 
     // PDF = screen-matching layout (report name, 4 cards, jurisdiction table + Grand Total, Top 15) via pdfkit
     const summaryBuffer = await generateReportPrintPdf(report, reportData, {});
-    const sourceReportIds = reportData.sourceReportIds;
+
+    let sourceReportIds = normalizeSourceReportIds(reportData.sourceReportIds || []);
+    if (sourceReportIds.length === 0) {
+      try {
+        const built = await buildSourceFilesForGeneratedReport(reportData, req.user.id, {
+          reportCreatedAt: report.created_at
+        });
+        sourceReportIds = built.map((f) => f.id).filter((id) => id != null);
+      } catch (e) {
+        console.warn('buildSourceFilesForGeneratedReport (download pdf):', e.message);
+      }
+    }
 
     let finalBuffer = summaryBuffer;
 
-    if (sourceReportIds && Array.isArray(sourceReportIds) && sourceReportIds.length > 0) {
+    if (sourceReportIds.length > 0) {
       const sourceResult = await db.query(
         `SELECT id, file_path, file_name, year, quarter_label, detected_date
          FROM ifta_reports
@@ -1222,8 +1285,8 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
 
         // 3) Append each source PDF in chronological order (on subsequent pages)
         for (const row of sourceResult.rows) {
-          const filePath = path.isAbsolute(row.file_path) ? row.file_path : path.join(process.cwd(), row.file_path);
-          if (!fs.existsSync(filePath)) continue;
+          const filePath = resolveStoredUploadPath(row.file_path);
+          if (!filePath || !fs.existsSync(filePath)) continue;
           try {
             const bytes = fs.readFileSync(filePath);
             const doc = await PDFDocument.load(bytes);

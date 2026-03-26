@@ -4,7 +4,6 @@ import toast from 'react-hot-toast'
 import { FileText } from 'lucide-react'
 import JurisdictionReportLoader from '../components/JurisdictionReportLoader'
 import SourceUploadFileRow from '../components/SourceUploadFileRow'
-import { getSiteOrigin } from '../lib/apiBase'
 
 const GeneratedReports = () => {
   const [reports, setReports] = useState([])
@@ -12,8 +11,6 @@ const GeneratedReports = () => {
   const [selectedReportId, setSelectedReportId] = useState(null)
   const [selectedPdfIds, setSelectedPdfIds] = useState(new Set())
   const [detailRefreshKey, setDetailRefreshKey] = useState(0)
-  const apiOrigin = getSiteOrigin()
-
   const selectedReport = useMemo(
     () => reports.find((r) => r.id === selectedReportId) || null,
     [reports, selectedReportId]
@@ -37,30 +34,6 @@ const GeneratedReports = () => {
     }
     setSelectedReportId(reports[0].id)
   }, [reports, selectedReportId])
-
-  useEffect(() => {
-    if (!selectedReport) return
-    let reportData = selectedReport.report_data
-    if (typeof reportData === 'string') {
-      try {
-        reportData = JSON.parse(reportData)
-      } catch {
-        reportData = {}
-      }
-    }
-    const displayName = String(
-      (reportData && (reportData.insuredName || reportData.companyName)) || ''
-    ).trim()
-    if (!displayName) return
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('ifta_display_name', displayName)
-      }
-      window.dispatchEvent(new Event('ifta-display-name-updated'))
-    } catch {
-      // Ignore storage errors
-    }
-  }, [selectedReport])
 
   const fetchReports = async () => {
     try {
@@ -205,7 +178,6 @@ const GeneratedReports = () => {
                   <SourceUploadFileRow
                     key={f.id != null ? `src-${f.id}` : `src-${selectedReport.id}-${idx}`}
                     file={f}
-                    apiOrigin={apiOrigin}
                     selectable
                     selected={f.id != null && selectedPdfIds.has(f.id)}
                     onToggleSelect={togglePdfSelect}

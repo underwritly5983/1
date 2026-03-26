@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { FileText } from 'lucide-react'
+import { AppLogo } from '../components/AppLogo'
 
 function safeReturnPath(raw) {
   if (!raw || typeof raw !== 'string') return '/reports'
@@ -43,10 +43,10 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 bg-primary-600 rounded-2xl mb-4">
-            <FileText className="h-8 w-8 text-white" />
+          <div className="mb-6">
+            <AppLogo variant="auth" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Sign in to IFTA Pro</h2>
+          <h2 className="text-3xl font-bold text-gray-900">Sign in</h2>
           <p className="mt-2 text-gray-600">Authorized users only</p>
         </div>
 

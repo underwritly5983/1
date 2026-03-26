@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { ExternalLink, Pencil, Trash2, Check, X } from 'lucide-react'
+import { getApiBaseUrl } from '../lib/apiBase'
 
 /**
  * One uploaded IFTA PDF used as a source for a generated summary.
@@ -9,7 +10,6 @@ import { ExternalLink, Pencil, Trash2, Check, X } from 'lucide-react'
  */
 const SourceUploadFileRow = ({
   file,
-  apiOrigin,
   onChanged,
   compact = false,
   selectable = false,
@@ -25,7 +25,35 @@ const SourceUploadFileRow = ({
     setRenaming(false)
   }, [file.id, file.fileName])
 
-  const viewHref = file.viewUrl ? `${apiOrigin}${file.viewUrl}` : null
+  const canView = file.id != null
+
+  const handleViewPdf = async () => {
+    if (!canView) return
+    try {
+      const { data } = await axios.get(
+        `${getApiBaseUrl()}/reports/source-file/${file.id}`,
+        { responseType: 'blob' }
+      )
+      const url = URL.createObjectURL(data)
+      const w = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!w) {
+        toast.error('Pop-up blocked — allow pop-ups to view the PDF.')
+        URL.revokeObjectURL(url)
+        return
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 120000)
+    } catch (error) {
+      let msg = error.response?.data?.error
+      if (!msg && error.response?.data instanceof Blob) {
+        try {
+          msg = JSON.parse(await error.response.data.text()).error
+        } catch {
+          msg = null
+        }
+      }
+      toast.error(msg || 'Failed to open PDF')
+    }
+  }
 
   const handleSaveRename = async () => {
     const next = draft.trim()
@@ -111,18 +139,17 @@ const SourceUploadFileRow = ({
         )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-        {viewHref ? (
-          <a
-            href={viewHref}
-            target="_blank"
-            rel="noopener noreferrer"
+        {canView ? (
+          <button
+            type="button"
+            onClick={handleViewPdf}
             className="inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-primary-600 hover:text-primary-800"
           >
             <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             View
-          </a>
+          </button>
         ) : (
-          <span className="text-xs text-gray-400">No file URL</span>
+          <span className="text-xs text-gray-400">No file</span>
         )}
         {canEdit && !renaming && (
           <>

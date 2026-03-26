@@ -228,7 +228,6 @@ const JurisdictionReportContent = ({
               <SourceUploadFileRow
                 key={f.id != null ? `ifta-${f.id}` : `row-${idx}`}
                 file={f}
-                apiOrigin={apiOrigin}
                 compact={embedded}
                 selectable={showFullControls}
                 selected={f.id != null && selectedSourcePdfIds.has(f.id)}
@@ -311,23 +310,7 @@ const JurisdictionReportContent = ({
   const reportData = typeof report.report_data === 'string'
     ? JSON.parse(report.report_data)
     : report.report_data
-  const preferredDisplayName =
-    (reportData && (reportData.insuredName || reportData.companyName)) ||
-    user?.companyName ||
-    ''
-
-  useEffect(() => {
-    const v = String(preferredDisplayName || '').trim()
-    if (!v) return
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('ifta_display_name', v)
-      }
-      window.dispatchEvent(new Event('ifta-display-name-updated'))
-    } catch {
-      // Avoid breaking the report page if browser storage is blocked
-    }
-  }, [preferredDisplayName])
+  const userDisplayName = user?.companyName || user?.email || ''
 
   const jurisdictionData = reportData.jurisdictionData || { jurisdictions: [], grandTotal: 0 }
   const sortedJurisdictions = sortJurisdictionsUSThenCanada(jurisdictionData.jurisdictions)
@@ -517,7 +500,7 @@ const JurisdictionReportContent = ({
               className="h-16 w-auto object-contain"
             />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">{preferredDisplayName || user.companyName}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{userDisplayName}</h2>
               <p className="text-gray-600">IFTA Jurisdiction Summary Report</p>
             </div>
           </div>

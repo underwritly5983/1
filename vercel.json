@@ -5,8 +5,7 @@
   "installCommand": "cd server && npm install && cd ../client && npm install",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/uploads/(.*)", "destination": "/api" },
-    { "source": "/((?!api/|uploads/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/index.js": {

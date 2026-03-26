@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, FileText, Zap, Shield, BarChart3, CheckCircle, Sparkles } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { AppLogo } from '../components/AppLogo'
 
 const Home = () => {
   const { user } = useAuth()
@@ -40,11 +41,14 @@ const Home = () => {
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
         <div className="text-center">
+          <div className="mb-8">
+            <AppLogo variant="hero" />
+          </div>
           <div className="inline-flex items-center px-4 py-2 bg-primary-100 text-primary-700 rounded-full text-sm font-medium mb-6">
             <Sparkles className="h-4 w-4 mr-2" />
             Transform IFTA Reports into Actionable Insights
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
             IFTA Summarizer <span className="text-primary-600">Pro</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">

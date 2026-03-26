@@ -1,33 +1,14 @@
-import { useEffect, useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { FileText, Upload, LogOut, User, BarChart3 } from 'lucide-react'
+import { AppLogo } from './AppLogo'
 
 const Layout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const [reportDisplayName, setReportDisplayName] = useState('')
 
-  useEffect(() => {
-    const load = () => {
-      try {
-        if (typeof localStorage === 'undefined') return
-        const v = String(localStorage.getItem('ifta_display_name') || '').trim()
-        setReportDisplayName(v)
-      } catch {
-        // Ignore storage errors (incognito / blocked cookies)
-      }
-    }
-    load()
-    window.addEventListener('storage', load)
-    window.addEventListener('ifta-display-name-updated', load)
-    return () => {
-      window.removeEventListener('storage', load)
-      window.removeEventListener('ifta-display-name-updated', load)
-    }
-  }, [])
-
-  const topRightName = reportDisplayName || user?.companyName || user?.email || 'User'
+  /** Logged-in broker / user — never the insured name from the report. */
+  const topRightName = user?.companyName || user?.email || 'User'
 
   const isUpload = location.pathname.startsWith('/reports/upload')
   const isViewReport =
@@ -48,10 +29,8 @@ const Layout = () => {
           <div className="flex justify-between items-center h-14">
             <div className="flex items-center gap-6">
               <Link to="/reports" className="flex items-center gap-2 shrink-0" title="IFTA summary">
-                <div className="h-8 w-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-lg flex items-center justify-center">
-                  <FileText className="h-4 w-4 text-white" />
-                </div>
-                <span className="text-lg font-bold text-gray-900 hidden sm:inline">IFTA Pro</span>
+                <AppLogo variant="nav" />
+                <span className="sr-only">IFTA Pro</span>
               </Link>
               <div className="flex items-center gap-2">
                 <Link to="/reports/upload" className={navClass(isUpload)}>
