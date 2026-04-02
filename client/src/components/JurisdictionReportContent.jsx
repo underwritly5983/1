@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import axios from 'axios'
+import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Download, ArrowUp, ArrowDown, Pencil, Trash2, X, Check } from 'lucide-react'
+import { ArrowLeft, Download, ArrowUp, ArrowDown, Pencil, Trash2, X, Check, Upload } from 'lucide-react'
 import { format } from 'date-fns'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import TravelHeatMap from './TravelHeatMap'
 import SourceUploadFileRow from './SourceUploadFileRow'
-import { getSiteOrigin } from '../lib/apiBase'
+import { getSiteOrigin, getApiBaseUrl } from '../lib/apiBase'
 
 const CANADIAN_PROVINCES = new Set(['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT'])
 
@@ -57,6 +58,7 @@ function formatReportDateLong(value) {
 const JurisdictionReportContent = ({
   report,
   reportId,
+  uploadCoverage,
   showBackButton = false,
   onBack,
   onReportDeleted,
@@ -75,7 +77,12 @@ const JurisdictionReportContent = ({
   const [selectedSourcePdfIds, setSelectedSourcePdfIds] = useState(() => new Set())
   const apiOrigin = getSiteOrigin()
   const sourceFiles = report.sourceFiles || []
+  const acceptanceAttachments = report.acceptanceAttachments || []
   const embedPad = embedded ? '[&_.card]:!p-4 [&_.card]:sm:!p-5 [&_.card]:lg:!p-6' : ''
+  const [acceptanceDropFiles, setAcceptanceDropFiles] = useState([])
+  const [uploadingAcceptance, setUploadingAcceptance] = useState(false)
+  const [fileLimitAcceptance, setFileLimitAcceptance] = useState(false)
+  const [quarterAgeDismissed, setQuarterAgeDismissed] = useState(false)
 
   const selectablePdfIds = useMemo(
     () => sourceFiles.map((f) => f.id).filter((id) => id != null),
@@ -94,6 +101,69 @@ const JurisdictionReportContent = ({
     setRenameDraft(report.report_name)
     setRenaming(false)
   }, [report.report_name, reportId])
+
+  useEffect(() => {
+    setAcceptanceDropFiles([])
+    setFileLimitAcceptance(false)
+  }, [reportId])
+
+  useEffect(() => {
+    setQuarterAgeDismissed(false)
+  }, [reportId])
+
+  useEffect(() => {
+    if (!report.showQuarterAgeWarning) setQuarterAgeDismissed(false)
+  }, [report.showQuarterAgeWarning])
+
+  const acceptanceUploadDisabled = embedded || hideSourceFiles || sourceFiles.length === 0
+  const { getRootProps: getRootAcceptanceProps, getInputProps: getInputAcceptanceProps, isDragActive: isAcceptanceDragActive } = useDropzone({
+    accept: { 'application/pdf': ['.pdf'] },
+    maxFiles: 4,
+    disabled: acceptanceUploadDisabled,
+    onDrop: (acceptedFiles, fileRejections) => {
+      const tooMany = fileRejections.some((fr) => fr.errors.some((e) => e.code === 'too-many-files'))
+      setFileLimitAcceptance(tooMany)
+      if (acceptedFiles.length > 0) {
+        setAcceptanceDropFiles(acceptedFiles)
+      }
+    },
+  })
+
+  const handleUploadAcceptance = async () => {
+    if (acceptanceDropFiles.length === 0 || !reportId) return
+    setUploadingAcceptance(true)
+    try {
+      const formData = new FormData()
+      acceptanceDropFiles.forEach((f) => formData.append('files', f))
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null
+      const url = `${getApiBaseUrl().replace(/\/$/, '')}/reports/generated/${reportId}/acceptance-upload`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`)
+      setAcceptanceDropFiles([])
+      setFileLimitAcceptance(false)
+      if (data.unmatchedSourcePeriods?.length) {
+        toast.error(`No matching PDF for Notice of Assessment period(s): ${data.unmatchedSourcePeriods.join(', ')}`, {
+          duration: 9000,
+        })
+      }
+      if (data.unmatchedAcceptanceUploads?.length) {
+        toast.error(`Could not match these uploads to a period: ${data.unmatchedAcceptanceUploads.join(', ')}`, {
+          duration: 9000,
+        })
+      }
+      toast.success('Notice of Acceptance/Reassessment saved. They are included in Download Report after each matching quarter.')
+      onSourceFilesChanged?.()
+    } catch (e) {
+      toast.error(e.message || 'Upload failed')
+    } finally {
+      setUploadingAcceptance(false)
+    }
+  }
 
   const handleSaveRename = async () => {
     const next = renameDraft.trim()
@@ -244,6 +314,136 @@ const JurisdictionReportContent = ({
     )
   }
 
+  const renderAcceptanceUploadCard = () => {
+    if (hideSourceFiles) return null
+    if (sourceFiles.length === 0) return null
+    const showFull = !embedded
+    return (
+      <div
+        className={`card min-w-0 ${
+          embedded ? 'border border-gray-200 bg-white' : 'border-primary-200 bg-primary-50/40'
+        }`}
+      >
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Notice of Acceptance / Reassessment (optional)</h2>
+          <p className="text-sm text-gray-600">
+            Add up to four more PDFs. Each file is matched to your Notice of Assessment by{' '}
+            <strong className="font-medium text-gray-800">quarter and year</strong> (read from the PDF). These are not used to
+            calculate the summary; they are appended in order right after each matching Notice of Assessment in the{' '}
+            <strong className="font-medium text-gray-800">Download Report</strong> PDF.
+          </p>
+          <p className="text-sm text-gray-500 mt-1">4 PDFs total per upload.</p>
+        </div>
+        {acceptanceAttachments.length > 0 && (
+          <div className="rounded-lg border border-gray-200 bg-white px-2 sm:px-3 mb-4">
+            {acceptanceAttachments.map((att, idx) => {
+              const srcLabel = [att.quarter, att.year].filter(Boolean).join(' ') || '—'
+              const srcName = sourceFiles.find((s) => s.id === att.sourceReportId)?.fileName || 'Notice of Assessment'
+              return (
+                <div key={att.sourceReportId ?? idx} className="py-3 border-b border-gray-100 last:border-0">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{srcLabel}</p>
+                  <p className="text-sm text-gray-800 mb-2">
+                    <span className="text-gray-600">Notice of Assessment:</span> {srcName}
+                  </p>
+                  {att.acceptance ? (
+                    <>
+                      <p className="text-xs font-medium text-gray-600 mb-1">Acceptance / Reassessment</p>
+                      <SourceUploadFileRow
+                        file={att.acceptance}
+                        compact={embedded}
+                        selectable={false}
+                        selected={false}
+                        onToggleSelect={() => {}}
+                        onChanged={() => {
+                          onSourceFilesChanged?.()
+                          onReportRenamed?.()
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-amber-900 bg-amber-50 rounded px-2 py-1.5 border border-amber-100">
+                      No acceptance/reassessment PDF matched for this period yet.
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {fileLimitAcceptance && (
+          <div className="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-sm">
+            <strong className="font-semibold">4 PDFs total</strong>
+            <span className="text-amber-900"> — Select at most four PDFs in one upload.</span>
+          </div>
+        )}
+        {showFull && (
+          <div className="mt-2 space-y-3">
+            <div
+              {...getRootAcceptanceProps()}
+              className={`border-2 border-dashed rounded-lg p-8 sm:p-12 text-center cursor-pointer transition-colors ${
+                isAcceptanceDragActive ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-primary-400'
+              }`}
+            >
+              <input {...getInputAcceptanceProps()} />
+              <Upload className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+              {acceptanceDropFiles.length > 0 ? (
+                <div className="space-y-1 text-sm">
+                  {acceptanceDropFiles.map((f, i) => (
+                    <p key={i} className="font-medium text-gray-900 truncate">
+                      {f.name}
+                    </p>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAcceptanceDropFiles([])
+                    }}
+                    className="text-sm text-primary-600 hover:underline mt-2"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              ) : (
+                <p className="text-gray-600 text-sm">
+                  {isAcceptanceDragActive ? 'Drop PDFs here' : 'Drag & drop up to 4 PDFs, or click to browse'}
+                </p>
+              )}
+            </div>
+            {acceptanceDropFiles.length > 0 && (
+              <button
+                type="button"
+                onClick={handleUploadAcceptance}
+                disabled={uploadingAcceptance}
+                className="w-full btn-primary py-2.5"
+              >
+                {uploadingAcceptance ? 'Uploading…' : `Upload ${acceptanceDropFiles.length} acceptance/reassessment PDF(s)`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const renderQuarterAgeBanner = () => {
+    if (!report.showQuarterAgeWarning || quarterAgeDismissed) return null
+    return (
+      <div className="card bg-amber-50 border-amber-200 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <p className="text-amber-900 text-sm leading-relaxed flex-1">
+          The most recent IFTA period in this summary is more than six months old. Upload newer quarterly PDFs if you need current data. This reminder appears when you open this report until newer notices are included.
+        </p>
+        <button
+          type="button"
+          onClick={() => setQuarterAgeDismissed(true)}
+          className="text-sm font-medium text-amber-950 hover:text-amber-800 underline shrink-0 self-start"
+        >
+          Dismiss
+        </button>
+      </div>
+    )
+  }
+
   const renderTitleBlock = () => (
     <div className="min-w-0 flex-1">
       {renaming ? (
@@ -386,6 +586,7 @@ const JurisdictionReportContent = ({
     return (
       <div className={`space-y-6 w-full min-w-0 max-w-full ${embedPad} ${embedded ? 'overflow-x-hidden' : ''}`}>
         {renderSourceFilesCard()}
+        {renderAcceptanceUploadCard()}
 
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start space-x-4 min-w-0">
@@ -426,6 +627,14 @@ const JurisdictionReportContent = ({
             )}
           </div>
         </div>
+
+        {uploadCoverage?.message && (
+          <div className="card bg-amber-50 border-amber-200">
+            <p className="text-amber-900 text-sm leading-relaxed">{uploadCoverage.message}</p>
+          </div>
+        )}
+
+        {renderQuarterAgeBanner()}
 
         <div className="card bg-amber-50 border-amber-200">
           <p className="text-amber-900">
@@ -488,6 +697,14 @@ const JurisdictionReportContent = ({
           </button>
         </div>
       </div>
+
+      {uploadCoverage?.message && (
+        <div className="card bg-amber-50 border-amber-200">
+          <p className="text-amber-900 text-sm leading-relaxed">{uploadCoverage.message}</p>
+        </div>
+      )}
+
+      {renderQuarterAgeBanner()}
 
       {user?.logoUrl && (
         <div className="card bg-gray-50">
@@ -705,6 +922,7 @@ const JurisdictionReportContent = ({
         </div>
         <div className="space-y-6">
           {renderSourceFilesCard()}
+          {renderAcceptanceUploadCard()}
           <div className="card min-w-0 max-w-full overflow-hidden">
             <h3 className="text-lg font-semibold text-gray-900 mb-5">Top 15 Jurisdictions</h3>
             <div className="overflow-x-auto w-full min-w-0">

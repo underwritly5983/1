@@ -10,6 +10,7 @@ const UploadReport = () => {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [uploadResults, setUploadResults] = useState([])
+  const [fileLimitExceeded, setFileLimitExceeded] = useState(false)
   const navigate = useNavigate()
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -17,10 +18,14 @@ const UploadReport = () => {
       'application/pdf': ['.pdf']
     },
     maxFiles: 4,
-    onDrop: (acceptedFiles) => {
+    onDrop: (acceptedFiles, fileRejections) => {
+      setUploadResults([])
+      const tooMany = fileRejections.some((fr) =>
+        fr.errors.some((e) => e.code === 'too-many-files')
+      )
+      setFileLimitExceeded(tooMany)
       if (acceptedFiles.length > 0) {
         setFiles(acceptedFiles)
-        setUploadResults([])
       }
     }
   })
@@ -48,21 +53,28 @@ const UploadReport = () => {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        if (data.code === 'LIMIT_FILE_COUNT' || /4 PDFs total/i.test(String(data.error || ''))) {
+          setFileLimitExceeded(true)
+        }
         const msg = data.error || data.message || `Upload failed (${res.status})`
         throw Object.assign(new Error(msg), { response: { status: res.status, data } })
       }
 
       setUploadResults(data.results || [])
       const allSuccess = data.results?.every(r => r.report)
-      if (allSuccess) {
+      if (data.quarterCoverage?.hasIssue && data.quarterCoverage?.message) {
+        toast.error(data.quarterCoverage.message, { duration: 10000 })
+      } else if (allSuccess) {
         toast.success(`${files.length} IFTA report(s) uploaded. Building your summary…`)
+      } else if (data.results?.some((r) => r.report)) {
+        toast.error('Some files could not be processed. See the list below.', { duration: 8000 })
       }
-      if (data.showQuarterAgeWarning) {
-        toast.error('The most recent IFTA quarter in your upload is over 6 months old. Please verify the data is current.', { duration: 8000 })
-      }
-
       const goToSummary = (id) => {
-        navigate(`/reports/jurisdiction/${id}`, { replace: true })
+        const qc = data.quarterCoverage
+        navigate(`/reports/jurisdiction/${id}`, {
+          replace: true,
+          state: qc?.hasIssue ? { uploadCoverage: qc } : undefined,
+        })
       }
 
       if (data.generatedReportId) {
@@ -100,6 +112,9 @@ const UploadReport = () => {
     } catch (error) {
       console.error('Upload error:', error);
       const d = error.response?.data;
+      if (typeof d === 'object' && d && d.code === 'LIMIT_FILE_COUNT') {
+        setFileLimitExceeded(true)
+      }
       const errorMessage =
         (typeof d === 'object' && d && d.error) ||
         (typeof d === 'object' && d && d.details) ||
@@ -127,6 +142,7 @@ const UploadReport = () => {
           Upload up to four quarterly PDFs (Notice of Assessment). You will be taken to one page with your combined summary,
           charts, and the source files you uploaded—no extra steps.
         </p>
+        <p className="text-sm text-gray-500 mt-2">4 PDFs total per upload (one file per quarter, Q1–Q4).</p>
       </div>
 
       <div className="card">
@@ -185,6 +201,13 @@ const UploadReport = () => {
             </div>
           )}
         </div>
+
+        {fileLimitExceeded && (
+          <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-sm">
+            <strong className="font-semibold">4 PDFs total</strong>
+            <span className="text-amber-900"> — You can select at most four Notice of Assessment PDFs in one upload. Remove extra files and try again.</span>
+          </div>
+        )}
 
         {files.length > 0 && (
           <div className="mt-6 space-y-4">

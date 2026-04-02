@@ -49,6 +49,18 @@ BEGIN
   END IF;
 END $$;
 
+-- Notice of Assessment vs Notice of Acceptance/Reassessment (append-only for download PDF)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'ifta_reports' AND column_name = 'document_kind'
+  ) THEN
+    ALTER TABLE ifta_reports ADD COLUMN document_kind VARCHAR(40) DEFAULT 'notice_of_assessment';
+  END IF;
+END $$;
+
 -- Generated Reports table
 CREATE TABLE IF NOT EXISTS generated_reports (
   id SERIAL PRIMARY KEY,

@@ -35,6 +35,80 @@ function rowToSourceFileRow(r) {
   };
 }
 
+function normalizeQuarterLabelForMatch(q) {
+  if (q == null) return null;
+  const s = String(q).trim().toUpperCase();
+  if (/^Q[1-4]$/.test(s)) return s;
+  const m = s.match(/^Q?([1-4])$/);
+  return m ? `Q${m[1]}` : null;
+}
+
+function sameIftaPeriodRow(a, b) {
+  const ya = a.year != null ? Number(a.year) : null;
+  const yb = b.year != null ? Number(b.year) : null;
+  if (ya == null || yb == null || ya !== yb) return false;
+  const qa = normalizeQuarterLabelForMatch(a.quarter_label ?? a.quarter);
+  const qb = normalizeQuarterLabelForMatch(b.quarter_label ?? b.quarter);
+  return Boolean(qa && qb && qa === qb);
+}
+
+function sortIftaRowsChronologically(rows) {
+  const qOrder = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
+  return [...rows].sort((a, b) => {
+    const yA = a.year ?? 0;
+    const yB = b.year ?? 0;
+    if (yA !== yB) return yA - yB;
+    return (qOrder[a.quarter_label] || 0) - (qOrder[b.quarter_label] || 0);
+  });
+}
+
+function parseAcceptancePairMap(reportData) {
+  const parsed = parseReportDataJson(reportData);
+  const raw = parsed.acceptanceReassessmentBySourceId;
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const sid = parseInt(k, 10);
+    const aid = parseInt(v, 10);
+    if (!Number.isNaN(sid) && !Number.isNaN(aid)) out[sid] = aid;
+  }
+  return out;
+}
+
+async function buildAcceptanceAttachmentsForReport(reportData, userId, sourceFiles) {
+  const pairs = parseAcceptancePairMap(reportData);
+  const accIds = [...new Set(Object.values(pairs))];
+  let byId = new Map();
+  if (accIds.length > 0) {
+    const accResult = await db.query(
+      `SELECT id, file_name, quarter_label, year
+       FROM ifta_reports
+       WHERE id = ANY($1::int[]) AND user_id = $2
+         AND document_kind = 'acceptance_reassessment'`,
+      [accIds, userId]
+    );
+    byId = new Map(accResult.rows.map((r) => [r.id, r]));
+  }
+  return (sourceFiles || []).map((sf) => {
+    const aid = sf.id != null ? pairs[sf.id] : null;
+    const r = aid != null ? byId.get(aid) : null;
+    return {
+      sourceReportId: sf.id,
+      quarter: sf.quarter,
+      year: sf.year,
+      acceptance: r
+        ? {
+            id: r.id,
+            fileName: r.file_name,
+            quarter: r.quarter_label,
+            year: r.year,
+            viewUrl: sourceFileViewUrl(r.id),
+          }
+        : null,
+    };
+  });
+}
+
 /** Normalize IDs saved on generated report JSON (may be strings from JSON). */
 function normalizeSourceReportIds(raw) {
   if (!Array.isArray(raw)) return [];
@@ -61,10 +135,143 @@ function parseReportDataJson(reportData) {
   return {};
 }
 
+function normalizeQuarterLabelForCoverage(q) {
+  if (q == null) return null;
+  const s = String(q).trim().toUpperCase();
+  if (['Q1', 'Q2', 'Q3', 'Q4'].includes(s)) return s;
+  const m = s.match(/^Q?([1-4])$/);
+  return m ? `Q${m[1]}` : null;
+}
+
+/** Single calendar quarter on a fixed timeline (Q1=0 .. Q4=3 per year). */
+function quarterCoverageSerial(year, qLabel) {
+  const q = { Q1: 0, Q2: 1, Q3: 2, Q4: 3 }[qLabel];
+  if (q == null || year == null || Number.isNaN(Number(year))) return null;
+  return Number(year) * 4 + q;
+}
+
+function areFourConsecutiveQuarterSerials(serials) {
+  const valid = serials.filter((s) => s != null);
+  if (valid.length !== 4) return false;
+  const s = [...valid].sort((a, b) => a - b);
+  for (let i = 1; i < 4; i += 1) {
+    if (s[i] !== s[i - 1] + 1) return false;
+  }
+  return true;
+}
+
+/**
+ * IFTA workflow expects up to four uploads that represent four *consecutive* calendar quarters
+ * (may span years, e.g. Q4 2024 + Q1–Q3 2025). Not "Q1–Q4 within each calendar year."
+ */
+function buildQuarterCoverage(results) {
+  const successful = (results || []).filter((r) => r.report && !r.error);
+  const undetectedFiles = [];
+  const pairRows = [];
+
+  for (const r of successful) {
+    const rawQ = r.report.quarter;
+    const y = r.report.year;
+    const q = normalizeQuarterLabelForCoverage(rawQ);
+    if (!q || y == null || Number.isNaN(Number(y))) {
+      if (r.fileName) undetectedFiles.push(r.fileName);
+      continue;
+    }
+    pairRows.push({ year: Number(y), quarter: q, fileName: r.fileName });
+  }
+
+  const uniqueKey = new Map();
+  for (const row of pairRows) {
+    const k = `${row.year}|${row.quarter}`;
+    if (!uniqueKey.has(k)) uniqueKey.set(k, row);
+  }
+  const uniqueRows = [...uniqueKey.values()];
+  const possibleDuplicateUpload = pairRows.length > uniqueRows.length;
+
+  const serials = uniqueRows.map((row) => quarterCoverageSerial(row.year, row.quarter));
+  const distinctCount = uniqueRows.length;
+  const uploadCount = successful.length;
+
+  const messages = [];
+
+  if (undetectedFiles.length) {
+    messages.push(
+      `Quarter or year could not be read from: ${undetectedFiles.join(', ')}. Try a clearer PDF or check the Notice of Assessment.`
+    );
+  }
+  if (possibleDuplicateUpload) {
+    messages.push(
+      'More than one file may map to the same quarter and year. Remove duplicates or use one PDF per quarter.'
+    );
+  }
+
+  let hasIssue = undetectedFiles.length > 0 || possibleDuplicateUpload;
+
+  if (!hasIssue && distinctCount === 4 && areFourConsecutiveQuarterSerials(serials)) {
+    return {
+      years: [],
+      undetectedFiles,
+      possibleDuplicateUpload: false,
+      message: null,
+      hasIssue: false,
+    };
+  }
+
+  if (!hasIssue && distinctCount === 0 && uploadCount === 0) {
+    return {
+      years: [],
+      undetectedFiles: [],
+      possibleDuplicateUpload: false,
+      message: null,
+      hasIssue: false,
+    };
+  }
+
+  if (distinctCount < 4 && undetectedFiles.length === 0 && !possibleDuplicateUpload) {
+    messages.push(
+      `Only ${distinctCount} distinct quarter period(s) could be detected${uploadCount > distinctCount ? ` from ${uploadCount} file(s)` : ''}. Upload four consecutive quarterly IFTA notices (or fix PDFs missing a clear period).`
+    );
+    hasIssue = true;
+  } else if (distinctCount === 4 && !areFourConsecutiveQuarterSerials(serials)) {
+    messages.push(
+      'The four reports are not four consecutive calendar quarters (for example Q4 2024 through Q3 2025, or Q1–Q4 within one year). Check each PDF’s detected period or upload a consecutive run.'
+    );
+    hasIssue = true;
+  } else if (distinctCount > 4) {
+    messages.push('More than four distinct quarter periods were detected. Use at most four PDFs for one consecutive run.');
+    hasIssue = true;
+  }
+
+  return {
+    years: [],
+    undetectedFiles,
+    possibleDuplicateUpload,
+    message: messages.length ? messages.join(' ') : null,
+    hasIssue,
+  };
+}
+
+async function computeShowQuarterAgeWarningForGeneratedReport(reportData, userId) {
+  try {
+    const ids = normalizeSourceReportIds(parseReportDataJson(reportData).sourceReportIds || []);
+    if (ids.length === 0) return false;
+    const r = await db.query(
+      `SELECT MAX(detected_date) AS d FROM ifta_reports WHERE id = ANY($1::int[]) AND user_id = $2`,
+      [ids, userId]
+    );
+    const d = r.rows[0]?.d;
+    return checkReportAge(d) === true;
+  } catch (e) {
+    console.warn('computeShowQuarterAgeWarningForGeneratedReport:', e.message);
+    return false;
+  }
+}
+
 /**
  * PDFs uploaded via "Upload Notice of Assessment" (ifta_reports) used to build this summary.
- * Uses sourceReportIds when present, matches report_data.quarters to the DB, and falls back to
- * uploads created shortly before the generated report when JSON is incomplete.
+ * When report_data.sourceReportIds is set, only those rows are listed (same order as saved IDs).
+ * Legacy rows without IDs resolve quarters against the DB using file name + created_at <= report time
+ * so deleting an upload does not swap in a newer file with the same name.
  */
 async function buildSourceFilesForGeneratedReport(reportData, userId, options = {}) {
   const { reportCreatedAt } = options;
@@ -91,16 +298,28 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
     out.push(f);
   };
 
+  // Authoritative: do not merge filename-based lookups — they use "latest by name" and pull unrelated
+  // uploads after the real rows are deleted.
   if (ids.length > 0) {
     const src = await db.query(
       `SELECT id, file_name, quarter_label, year, file_path
        FROM ifta_reports
        WHERE id = ANY($1::int[]) AND user_id = $2
-       ORDER BY year NULLS LAST, quarter_label NULLS LAST, id ASC`,
+         AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')`,
       [ids, userId]
     );
-    src.rows.forEach((r) => pushFile(rowToSourceFileRow(r)));
+    const byId = new Map(src.rows.map((r) => [r.id, rowToSourceFileRow(r)]));
+    const ordered = [];
+    for (const raw of ids) {
+      const id = typeof raw === 'number' ? raw : parseInt(raw, 10);
+      if (Number.isNaN(id)) continue;
+      const row = byId.get(id);
+      if (row) ordered.push(row);
+    }
+    return ordered;
   }
+
+  const createdBeforeReport = reportCreatedAt || null;
 
   for (const q of quarters) {
     const fileName = q.fileName || q.file_name;
@@ -118,9 +337,11 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
        WHERE user_id = $1 AND file_name = $2
          AND (year IS NOT DISTINCT FROM $3::int)
          AND (quarter_label IS NOT DISTINCT FROM $4)
+         AND ($5::timestamptz IS NULL OR created_at <= $5::timestamptz)
+         AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
        ORDER BY id DESC
        LIMIT 1`,
-      [userId, fileName, year, quarter]
+      [userId, fileName, year, quarter, createdBeforeReport]
     );
     if (strict.rows.length) row = strict.rows[0];
     if (!row) {
@@ -128,9 +349,11 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
         `SELECT id, file_name, quarter_label, year, file_path
          FROM ifta_reports
          WHERE user_id = $1 AND file_name = $2
+           AND ($3::timestamptz IS NULL OR created_at <= $3::timestamptz)
+           AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
          ORDER BY id DESC
          LIMIT 1`,
-        [userId, fileName]
+        [userId, fileName, createdBeforeReport]
       );
       if (loose.rows.length) row = loose.rows[0];
     }
@@ -159,6 +382,7 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
            AND file_path != ''
            AND created_at >= ($2::timestamptz - interval '2 hours')
            AND created_at <= ($2::timestamptz + interval '2 minutes')
+           AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
          ORDER BY created_at ASC
          LIMIT 8`,
         [userId, reportCreatedAt]
@@ -174,6 +398,7 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
                AND file_path != ''
                AND created_at <= ($2::timestamptz + interval '1 minute')
                AND created_at >= ($2::timestamptz - interval '72 hours')
+               AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
              ORDER BY created_at DESC
              LIMIT 4
            ) AS recent
@@ -232,7 +457,10 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
   upload.array('files', 4)(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_COUNT') {
-        return res.status(400).json({ error: 'Maximum 4 files allowed' });
+        return res.status(400).json({
+          error: 'Maximum 4 files allowed per upload (4 PDFs total).',
+          code: 'LIMIT_FILE_COUNT',
+        });
       }
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ error: 'File size exceeds 10MB limit' });
@@ -524,12 +752,15 @@ router.post('/upload-multiple', authenticate, (req, res, next) => {
       showQuarterAgeWarning = checkReportAge(mostRecentDate);
     }
 
+    const quarterCoverage = buildQuarterCoverage(results);
+
     res.json({
       message: `${req.files.length} file(s) uploaded successfully`,
       results,
       summaryPdfUrl,
       generatedReportId,
-      showQuarterAgeWarning
+      showQuarterAgeWarning,
+      quarterCoverage,
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -640,6 +871,7 @@ router.get('/', authenticate, async (req, res) => {
        FROM ifta_reports r
        JOIN users u ON u.id = r.user_id
        WHERE r.user_id = $1
+         AND (r.document_kind IS NULL OR r.document_kind = 'notice_of_assessment')
        ORDER BY r.year DESC NULLS LAST, r.quarter_label DESC NULLS LAST, r.created_at DESC`,
       [req.user.id]
     );
@@ -1021,6 +1253,194 @@ router.get('/generated/list', authenticate, async (req, res) => {
   }
 });
 
+// Upload up to 4 Notice of Acceptance/Reassessment PDFs; matched to Notice of Assessment by quarter/year; appended after each NOA on Download Report PDF only.
+router.post(
+  '/generated/:id/acceptance-upload',
+  authenticate,
+  (req, res, next) => {
+    upload.array('files', 4)(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({
+            error: 'Maximum 4 Notice of Acceptance/Reassessment PDFs per upload.',
+            code: 'LIMIT_FILE_COUNT',
+          });
+        }
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File size exceeds 10MB limit' });
+        }
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
+      }
+      if (err) {
+        return res.status(400).json({ error: err.message || 'File upload error' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const generatedId = parseInt(req.params.id, 10);
+      if (Number.isNaN(generatedId)) {
+        return res.status(400).json({ error: 'Invalid report id' });
+      }
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: 'No files uploaded' });
+      }
+
+      const gr = await db.query(
+        `SELECT id, report_data FROM generated_reports WHERE id = $1 AND user_id = $2`,
+        [generatedId, req.user.id]
+      );
+      if (gr.rows.length === 0) {
+        return res.status(404).json({ error: 'Report not found' });
+      }
+
+      const reportDataObj =
+        typeof gr.rows[0].report_data === 'string'
+          ? JSON.parse(gr.rows[0].report_data)
+          : gr.rows[0].report_data || {};
+      const sourceIds = normalizeSourceReportIds(reportDataObj.sourceReportIds || []);
+      if (sourceIds.length === 0) {
+        return res.status(400).json({
+          error:
+            'This summary has no linked Notice of Assessment uploads. Regenerate the report from uploaded IFTAs first.',
+        });
+      }
+
+      const oldPairs = parseAcceptancePairMap(gr.rows[0].report_data);
+      const oldAccIds = [...new Set(Object.values(oldPairs))].filter((n) => !Number.isNaN(n));
+      if (oldAccIds.length > 0) {
+        await db.query(
+          `DELETE FROM ifta_reports
+           WHERE id = ANY($1::int[]) AND user_id = $2 AND document_kind = 'acceptance_reassessment'`,
+          [oldAccIds, req.user.id]
+        );
+      }
+
+      const srcRes = await db.query(
+        `SELECT id, quarter_label, year
+         FROM ifta_reports
+         WHERE id = ANY($1::int[]) AND user_id = $2
+           AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')`,
+        [sourceIds, req.user.id]
+      );
+      if (srcRes.rows.length === 0) {
+        return res.status(400).json({ error: 'Notice of Assessment source files were not found. Re-upload your IFTAs.' });
+      }
+      const sortedSources = sortIftaRowsChronologically(srcRes.rows);
+
+      const uploadedMeta = [];
+      const fileResults = [];
+
+      for (const file of req.files) {
+        const filePath = file.path;
+        const fileName = file.originalname;
+        const fileSize = file.size;
+        try {
+          const fileBytes = fs.readFileSync(filePath);
+          const pdfData = await parsePDF(filePath);
+          let quarterInfo = extractQuarterInfo(pdfData.firstPageText || '');
+          if (!quarterInfo.quarter || !quarterInfo.year) {
+            quarterInfo = extractQuarterInfo(pdfData.text || '');
+          }
+          if (!quarterInfo.quarter || !quarterInfo.year) {
+            fileResults.push({
+              fileName,
+              error: 'Could not detect quarter and year on this PDF. Use a file that shows the IFTA period clearly.',
+            });
+            continue;
+          }
+          const rawTextToStore =
+            pdfData.text.length > 2000000 ? pdfData.text.substring(0, 2000000) : pdfData.text;
+
+          const ins = await db.query(
+            `INSERT INTO ifta_reports (
+               user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date,
+               raw_text, status, file_blob, document_kind
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             RETURNING id, quarter_label, year`,
+            [
+              req.user.id,
+              fileName,
+              filePath,
+              fileSize,
+              quarterInfo.quarter,
+              quarterInfo.year,
+              quarterInfo.quarter,
+              quarterInfo.detectedDate,
+              rawTextToStore,
+              'completed',
+              fileBytes,
+              'acceptance_reassessment',
+            ]
+          );
+          const row = ins.rows[0];
+          uploadedMeta.push({
+            id: row.id,
+            quarter_label: row.quarter_label,
+            year: row.year,
+          });
+          fileResults.push({
+            fileName,
+            report: {
+              id: row.id,
+              quarter: row.quarter_label,
+              year: row.year,
+            },
+          });
+        } catch (e) {
+          console.error('acceptance-upload file error:', e);
+          fileResults.push({ fileName, error: e.message || 'Failed to process file' });
+        }
+      }
+
+      if (uploadedMeta.length === 0) {
+        return res.status(400).json({
+          error: 'No valid Notice of Acceptance/Reassessment files could be saved.',
+          results: fileResults,
+        });
+      }
+
+      const pool = uploadedMeta.slice();
+      const pairs = {};
+      const unmatchedSources = [];
+      for (const src of sortedSources) {
+        const idx = pool.findIndex((u) => sameIftaPeriodRow(src, u));
+        if (idx >= 0) {
+          pairs[src.id] = pool[idx].id;
+          pool.splice(idx, 1);
+        } else {
+          unmatchedSources.push([src.quarter_label, src.year].filter(Boolean).join(' ') || `id ${src.id}`);
+        }
+      }
+
+      const nextData = {
+        ...reportDataObj,
+        acceptanceReassessmentBySourceId: Object.fromEntries(
+          Object.entries(pairs).map(([k, v]) => [String(k), v])
+        ),
+      };
+
+      await db.query(
+        `UPDATE generated_reports SET report_data = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
+        [JSON.stringify(nextData), generatedId, req.user.id]
+      );
+
+      res.json({
+        message: 'Notice of Acceptance/Reassessment files saved.',
+        acceptanceReassessmentBySourceId: nextData.acceptanceReassessmentBySourceId,
+        results: fileResults,
+        unmatchedSourcePeriods: unmatchedSources,
+        unmatchedAcceptanceUploads: pool.map((u) => [u.quarter_label, u.year].filter(Boolean).join(' ')),
+      });
+    } catch (error) {
+      console.error('acceptance-upload error:', error);
+      res.status(500).json({ error: 'Failed to save acceptance/reassessment files' });
+    }
+  }
+);
+
 // Delete multiple generated reports (must be before /generated/:id)
 router.post('/generated/delete-batch', authenticate, async (req, res) => {
   try {
@@ -1081,7 +1501,27 @@ router.get('/generated/:id', authenticate, async (req, res) => {
       console.warn('buildSourceFilesForGeneratedReport:', e.message);
     }
 
-    res.json({ report: { ...row, sourceFiles } });
+    let acceptanceAttachments = [];
+    try {
+      acceptanceAttachments = await buildAcceptanceAttachmentsForReport(
+        row.report_data,
+        req.user.id,
+        sourceFiles
+      );
+    } catch (e) {
+      console.warn('buildAcceptanceAttachmentsForReport:', e.message);
+    }
+
+    let showQuarterAgeWarning = false;
+    try {
+      showQuarterAgeWarning = await computeShowQuarterAgeWarningForGeneratedReport(row.report_data, req.user.id);
+    } catch (e) {
+      console.warn('computeShowQuarterAgeWarningForGeneratedReport:', e.message);
+    }
+
+    res.json({
+      report: { ...row, sourceFiles, acceptanceAttachments, showQuarterAgeWarning },
+    });
   } catch (error) {
     console.error('Get generated report error:', error);
     res.status(500).json({ error: 'Failed to fetch report' });
@@ -1237,9 +1677,10 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
 
     if (sourceReportIds.length > 0) {
       const sourceResult = await db.query(
-        `SELECT id, file_path, file_blob, file_name, year, quarter_label, detected_date
+        `SELECT id, file_path, file_blob, file_name, year, quarter_label, detected_date, document_kind
          FROM ifta_reports
          WHERE id = ANY($1::int[]) AND user_id = $2
+           AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
            AND (file_blob IS NOT NULL OR (file_path IS NOT NULL AND file_path != ''))`,
         [sourceReportIds, req.user.id]
       );
@@ -1259,7 +1700,30 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
           return dateA - dateB;
         });
 
+        const acceptancePairMap = parseAcceptancePairMap(reportData);
+        const accIdsFromPairs = [...new Set(Object.values(acceptancePairMap))];
+        let accById = new Map();
+        if (accIdsFromPairs.length > 0) {
+          const accRes = await db.query(
+            `SELECT id, file_path, file_blob, file_name, year, quarter_label, detected_date
+             FROM ifta_reports
+             WHERE id = ANY($1::int[]) AND user_id = $2
+               AND document_kind = 'acceptance_reassessment'
+               AND (file_blob IS NOT NULL OR (file_path IS NOT NULL AND file_path != ''))`,
+            [accIdsFromPairs, req.user.id]
+          );
+          accById = new Map(accRes.rows.map((r) => [r.id, r]));
+        }
+
         const mergedPdf = await PDFDocument.create();
+
+        const loadPdfBytes = (row) => {
+          if (!row) return null;
+          if (row.file_blob) return Buffer.from(row.file_blob);
+          const fp = resolveStoredUploadPath(row.file_path);
+          if (!fp || !fs.existsSync(fp)) return null;
+          return fs.readFileSync(fp);
+        };
 
         // 1) Summary pages first — add disclaimer to bottom of first page
         const summaryDoc = await PDFDocument.load(summaryBuffer);
@@ -1267,64 +1731,98 @@ router.get('/generated/:id/pdf', authenticate, async (req, res) => {
         const fontBold = await summaryDoc.embedStandardFont(StandardFonts.HelveticaBold);
         const firstPage = summaryDoc.getPage(0);
         // Disclaimer at bottom of first page (y from bottom)
-        let y = 32;
-        firstPage.drawText('Source Reports', { x: 50, y, size: 10, font: fontBold });
-        y += 16;
-        firstPage.drawText('Chronological (Oldest to Newest)', { x: 50, y, size: 9, font });
+        let y = 28;
+        firstPage.drawText('Source documents (download bundle)', { x: 50, y, size: 10, font: fontBold });
         y += 14;
-        firstPage.drawText('The following pages are the uploaded IFTA reports used to generate the summary above.', { x: 50, y, size: 8, font });
-        y += 18;
+        firstPage.drawText('Chronological by quarter. For each period: Notice of Assessment, then Notice of Acceptance/Reassessment when provided.', { x: 50, y, size: 8, font });
+        y += 16;
         for (const row of sourceResult.rows) {
           const label = [row.quarter_label, row.year].filter(Boolean).join(' ') || 'Report';
           const name = row.file_name || `Report ${row.id}`;
-          firstPage.drawText(`• ${label} — ${name}`, { x: 50, y, size: 8, font });
-          y += 14;
+          firstPage.drawText(`• ${label} — Notice of Assessment: ${name}`, { x: 50, y, size: 7, font });
+          y += 12;
+          const accId = acceptancePairMap[row.id];
+          if (accId && accById.has(accId)) {
+            const ar = accById.get(accId);
+            firstPage.drawText(`  → Notice of Acceptance/Reassessment: ${ar.file_name || `File ${ar.id}`}`, {
+              x: 50,
+              y,
+              size: 7,
+              font,
+            });
+            y += 12;
+          }
+          y += 4;
         }
 
         const summaryPageCount = summaryDoc.getPageCount();
         const summaryIndices = Array.from({ length: summaryPageCount }, (_, i) => i);
         const summaryPages = await mergedPdf.copyPages(summaryDoc, summaryIndices);
-        summaryPages.forEach(p => mergedPdf.addPage(p));
+        summaryPages.forEach((p) => mergedPdf.addPage(p));
 
-        // 2) Add a "Source Reports" divider page listing uploaded files (chronological)
+        // 2) Divider page
         const dividerPage = mergedPdf.addPage([612, 792]);
         const helvetica = await mergedPdf.embedStandardFont(StandardFonts.Helvetica);
         const helveticaBold = await mergedPdf.embedStandardFont(StandardFonts.HelveticaBold);
         const pageHeight = 792;
         const marginPx = 50;
         let divY = pageHeight - marginPx;
-        dividerPage.drawText('Source Reports', { x: marginPx, y: divY, size: 16, font: helveticaBold });
-        divY -= 24;
-        dividerPage.drawText('The following uploaded files (in chronological order) were used to generate the summary above.', { x: marginPx, y: divY, size: 10, font: helvetica });
-        divY -= 20;
-        dividerPage.drawText('Each document appears on the subsequent pages in the order listed below.', { x: marginPx, y: divY, size: 10, font: helvetica });
-        divY -= 28;
+        dividerPage.drawText('Source documents', { x: marginPx, y: divY, size: 16, font: helveticaBold });
+        divY -= 22;
+        dividerPage.drawText(
+          'Per quarter: Notice of Assessment PDF, then the matching Notice of Acceptance/Reassessment PDF (when uploaded).',
+          { x: marginPx, y: divY, size: 10, font: helvetica }
+        );
+        divY -= 22;
         for (let i = 0; i < sourceResult.rows.length; i++) {
           const row = sourceResult.rows[i];
           const label = [row.quarter_label, row.year].filter(Boolean).join(' ') || 'Report';
           const name = row.file_name || `Report ${row.id}`;
-          dividerPage.drawText(`${i + 1}. ${label} — ${name}`, { x: marginPx, y: divY, size: 10, font: helvetica });
-          divY -= 18;
+          dividerPage.drawText(`${i + 1}. ${label} — Notice of Assessment: ${name}`, { x: marginPx, y: divY, size: 10, font: helvetica });
+          divY -= 16;
+          const accId = acceptancePairMap[row.id];
+          if (accId && accById.has(accId)) {
+            const ar = accById.get(accId);
+            dividerPage.drawText(`   Then — Acceptance/Reassessment: ${ar.file_name || `File ${ar.id}`}`, {
+              x: marginPx,
+              y: divY,
+              size: 9,
+              font: helvetica,
+            });
+            divY -= 14;
+          }
+          divY -= 6;
         }
 
-        // 3) Append each source PDF in chronological order (on subsequent pages)
+        // 3) Append each Notice of Assessment, then its matched Acceptance/Reassessment (same quarter/year)
         for (const row of sourceResult.rows) {
           try {
-            const bytes = row.file_blob
-              ? Buffer.from(row.file_blob)
-              : (() => {
-                  const filePath = resolveStoredUploadPath(row.file_path);
-                  if (!filePath || !fs.existsSync(filePath)) return null;
-                  return fs.readFileSync(filePath);
-                })();
-            if (!bytes) continue;
-            const doc = await PDFDocument.load(bytes);
-            const pageCount = doc.getPageCount();
-            const indices = Array.from({ length: pageCount }, (_, i) => i);
-            const pages = await mergedPdf.copyPages(doc, indices);
-            pages.forEach(p => mergedPdf.addPage(p));
+            const bytes = loadPdfBytes(row);
+            if (bytes) {
+              const doc = await PDFDocument.load(bytes);
+              const pageCount = doc.getPageCount();
+              const indices = Array.from({ length: pageCount }, (_, i) => i);
+              const pages = await mergedPdf.copyPages(doc, indices);
+              pages.forEach((p) => mergedPdf.addPage(p));
+            }
           } catch (err) {
-            console.warn('Could not merge source PDF:', row.file_path, err.message);
+            console.warn('Could not merge Notice of Assessment PDF:', row.file_path, err.message);
+          }
+          const accId = acceptancePairMap[row.id];
+          if (accId && accById.has(accId)) {
+            const accRow = accById.get(accId);
+            try {
+              const accBytes = loadPdfBytes(accRow);
+              if (accBytes) {
+                const accDoc = await PDFDocument.load(accBytes);
+                const accCount = accDoc.getPageCount();
+                const accIdx = Array.from({ length: accCount }, (_, i) => i);
+                const accPages = await mergedPdf.copyPages(accDoc, accIdx);
+                accPages.forEach((p) => mergedPdf.addPage(p));
+              }
+            } catch (err) {
+              console.warn('Could not merge Acceptance/Reassessment PDF:', accRow.file_path, err.message);
+            }
           }
         }
 

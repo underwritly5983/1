@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import JurisdictionReportContent from '../components/JurisdictionReportContent'
@@ -7,6 +7,8 @@ import JurisdictionReportContent from '../components/JurisdictionReportContent'
 const JurisdictionReport = () => {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const uploadCoverage = location.state?.uploadCoverage
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -43,6 +45,7 @@ const JurisdictionReport = () => {
     <JurisdictionReportContent
       report={report}
       reportId={id}
+      uploadCoverage={uploadCoverage}
       showBackButton
       onBack={() => navigate('/reports')}
       onReportRenamed={fetchReport}
