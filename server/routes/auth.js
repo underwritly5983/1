@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
+const permissionService = require('../services/permissionService');
 
 const router = express.Router();
 
@@ -104,8 +105,21 @@ router.post('/register',
         [user.id, 'user_registered', JSON.stringify({ email, companyName })]
       );
 
+      try {
+        await permissionService.ensureOwnerOrganization(user.id, companyName);
+      } catch (rbacErr) {
+        console.warn('RBAC: ensureOwnerOrganization failed (non-fatal):', rbacErr.message);
+      }
+
       // Generate token
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+      let organizationId = null;
+      try {
+        organizationId = await permissionService.getDefaultOrganizationIdForUser(user.id);
+      } catch (_) {
+        /* ignore */
+      }
 
       res.status(201).json({
         message: 'User created successfully',
@@ -118,7 +132,8 @@ router.post('/register',
           logoUrl: user.logo_url,
           brandColorPrimary: user.brand_color_primary,
           brandColorSecondary: user.brand_color_secondary,
-          subscriptionTier: user.subscription_tier
+          subscriptionTier: user.subscription_tier,
+          organizationId
         }
       });
     } catch (error) {
@@ -188,6 +203,13 @@ router.post('/login',
       // Generate token (JWT_SECRET already checked above)
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
+      let organizationId = null;
+      try {
+        organizationId = await permissionService.getDefaultOrganizationIdForUser(user.id);
+      } catch (_) {
+        /* ignore */
+      }
+
       return sendSafe(200, {
         token,
         user: {
@@ -196,7 +218,8 @@ router.post('/login',
           companyName: user.company_name,
           subscriptionTier: user.subscription_tier,
           subscriptionStatus: user.subscription_status,
-          isAdmin: user.is_admin
+          isAdmin: user.is_admin,
+          organizationId
         }
       });
     } catch (error) {
