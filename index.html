@@ -15,6 +15,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="assets/logo-small.png" type="image/png" />
   </head>
   <body>
     <div id="api-env-warning" class="dev-api-warning hidden" role="status" aria-live="polite">
@@ -26,11 +27,11 @@
       <div class="container header-inner">
         <a class="brand" href="#top">
           <img
-            src="assets/logo.PNG"
+            src="assets/logo-small.png"
             alt="Underwritly"
-            width="520"
-            height="134"
-            class="brand-logo"
+            width="200"
+            height="200"
+            class="brand-logo brand-logo--mark"
             decoding="async"
           />
         </a>
@@ -156,6 +157,14 @@
 
       <section class="hero">
         <div class="container hero-inner">
+          <img
+            class="hero-brand-logo"
+            src="assets/logo.PNG"
+            alt=""
+            width="320"
+            height="320"
+            decoding="async"
+          />
           <p class="eyebrow">Insurance broker platform</p>
           <h1 class="hero-title">
             Purpose-built for underwriting and risk identification.
@@ -176,10 +185,11 @@
       <section id="features" class="features">
         <div class="container">
           <header class="section-head">
-            <h2 class="section-title">Capabilities</h2>
+            <p class="section-eyebrow">Core modules</p>
+            <h2 class="section-title">Everything you need for underwriting</h2>
             <p class="section-sub">
-              Modular tools that deliver consistent formatting, audit-friendly outputs, and clear
-              visual summaries to support underwriting decisions.
+              Four integrated modules designed to streamline your commercial auto underwriting
+              workflow.
             </p>
           </header>
           <ul class="feature-grid">
@@ -235,6 +245,116 @@
               </p>
             </li>
           </ul>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="how-it-works">
+        <div class="container">
+          <header class="section-head section-head--center how-it-works-head">
+            <p class="section-eyebrow section-eyebrow--dark">Process</p>
+            <h2 class="section-title section-title--dark">How it works</h2>
+            <p class="section-sub section-sub--dark">
+              From document upload to underwriting decision in three simple steps.
+            </p>
+          </header>
+
+          <ol class="how-steps">
+            <li class="how-step">
+              <div class="how-step-line" aria-hidden="true"></div>
+              <div class="how-step-icon how-step-icon--blue" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </div>
+              <p class="how-step-number">Step 01</p>
+              <h3 class="how-step-title">Upload your documents</h3>
+              <p class="how-step-body">
+                Drop in IFTA returns, driver abstracts, vehicle schedules, and compliance reports.
+                Our system accepts all standard formats.
+              </p>
+            </li>
+            <li class="how-step">
+              <div class="how-step-line" aria-hidden="true"></div>
+              <div class="how-step-icon how-step-icon--teal" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="4" width="16" height="16" rx="3"/>
+                  <path d="M9 9h6v6H9z"/>
+                  <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>
+                </svg>
+              </div>
+              <p class="how-step-number">Step 02</p>
+              <h3 class="how-step-title">Automated analysis</h3>
+              <p class="how-step-body">
+                Underwritly processes, validates, and cross-references your data against policy
+                requirements and industry standards.
+              </p>
+            </li>
+            <li class="how-step">
+              <div class="how-step-line how-step-line--none" aria-hidden="true"></div>
+              <div class="how-step-icon how-step-icon--green" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5"/>
+                </svg>
+              </div>
+              <p class="how-step-number">Step 03</p>
+              <h3 class="how-step-title">Review-ready output</h3>
+              <p class="how-step-body">
+                Receive structured summaries, flagged exceptions, and formatted workbooks ready for
+                underwriting decisions.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="pricing" class="pricing">
+        <div class="container">
+          <header class="section-head section-head--center">
+            <p class="section-eyebrow">Pricing</p>
+            <h2 class="section-title">Flexible plans for underwriting teams</h2>
+            <p class="section-sub">
+              Start with early access and scale usage as your workflow grows. We will reach out with
+              onboarding options for your organization.
+            </p>
+          </header>
+
+          <div class="pricing-grid">
+            <article class="pricing-card pricing-card--highlight">
+              <div class="pricing-pill">Early access</div>
+              <h3 class="pricing-title">Pilot rollout</h3>
+              <p class="pricing-body">
+                Get your team onboarded with guided setup, priority support, and underwriting-ready
+                outputs for IFTA and fleet documentation.
+              </p>
+              <ul class="pricing-list">
+                <li>Broker dashboard and secure uploads</li>
+                <li>IFTA summary workbooks + downloadable reports</li>
+                <li>Driver and vehicle verification workflows</li>
+              </ul>
+              <div class="pricing-actions">
+                <a class="btn btn-primary btn-block" href="#early-access">Request early access</a>
+              </div>
+            </article>
+
+            <article class="pricing-card">
+              <div class="pricing-pill pricing-pill--muted">Enterprise</div>
+              <h3 class="pricing-title">Portfolio scale</h3>
+              <p class="pricing-body">
+                Centralize underwriting intake across teams with custom governance, integrations,
+                and reporting tailored to your portfolio.
+              </p>
+              <ul class="pricing-list">
+                <li>Custom output formats and internal templates</li>
+                <li>Dedicated onboarding + SSO options</li>
+                <li>Workflow and data integrations</li>
+              </ul>
+              <div class="pricing-actions">
+                <a class="btn btn-ghost btn-block" href="#early-access">Talk to us</a>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
 
@@ -334,7 +454,50 @@
 
     <footer class="site-footer">
       <div class="container footer-inner">
-        <p>© <span id="year"></span> Underwritly. All rights reserved.</p>
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <a class="footer-brand-link" href="#top">
+              <img
+                src="assets/logo-small.png"
+                alt="Underwritly"
+                width="96"
+                height="96"
+                class="footer-logo"
+                decoding="async"
+              />
+              <span class="footer-brand-name">Underwritly</span>
+            </a>
+            <p class="footer-brand-sub">
+              Purpose-built insurance broker software for underwriting and risk identification.
+            </p>
+          </div>
+
+          <nav class="footer-col" aria-label="Product">
+            <h4 class="footer-title">Product</h4>
+            <a class="footer-link" href="#features">Features</a>
+            <a class="footer-link" href="#how-it-works">How it works</a>
+            <a class="footer-link" href="#pricing">Pricing</a>
+          </nav>
+
+          <nav class="footer-col" aria-label="Account">
+            <h4 class="footer-title">Account</h4>
+            <a class="footer-link" href="/login.html">Sign in</a>
+            <a class="footer-link" href="/register.html">Register</a>
+            <a class="footer-link" href="/dashboard.html">Dashboard</a>
+          </nav>
+
+          <div class="footer-col">
+            <h4 class="footer-title">Contact</h4>
+            <a class="footer-link" href="mailto:info@underwritly.com">info@underwritly.com</a>
+            <p class="footer-note">
+              Prefer a call? Submit an early access request and we will follow up.
+            </p>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p class="footer-copy">© <span id="year"></span> Underwritly. All rights reserved.</p>
+        </div>
       </div>
     </footer>
 

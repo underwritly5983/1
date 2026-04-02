@@ -16,7 +16,17 @@
   <body class="page-admin">
     <header class="site-header admin-header">
       <div class="container header-inner">
-        <p class="admin-brand">Underwritly — back office</p>
+        <div class="admin-brand-row">
+          <img
+            src="assets/logo-small.png"
+            alt=""
+            width="200"
+            height="200"
+            class="brand-logo brand-logo--mark"
+            decoding="async"
+          />
+          <p class="admin-brand">Underwritly — back office</p>
+        </div>
         <nav class="nav admin-nav" aria-label="Admin">
           <span id="admin-user-label" class="admin-user-label hidden"></span>
           <button type="button" class="btn btn-ghost btn-nav-logout hidden" id="admin-logout-btn">
@@ -194,7 +204,50 @@
 
     <footer class="site-footer">
       <div class="container footer-inner">
-        <p>Protect admin credentials — treat this like internal tooling.</p>
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <a class="footer-brand-link" href="/#top">
+              <img
+                src="assets/logo-small.png"
+                alt="Underwritly"
+                width="96"
+                height="96"
+                class="footer-logo"
+                decoding="async"
+              />
+              <span class="footer-brand-name">Underwritly</span>
+            </a>
+            <p class="footer-brand-sub">
+              Internal tooling — protect admin credentials and restrict access.
+            </p>
+          </div>
+
+          <nav class="footer-col" aria-label="Product">
+            <h4 class="footer-title">Product</h4>
+            <a class="footer-link" href="/#features">Features</a>
+            <a class="footer-link" href="/#how-it-works">How it works</a>
+            <a class="footer-link" href="/#pricing">Pricing</a>
+          </nav>
+
+          <nav class="footer-col" aria-label="Account">
+            <h4 class="footer-title">Account</h4>
+            <a class="footer-link" href="/login.html">Sign in</a>
+            <a class="footer-link" href="/register.html">Register</a>
+            <a class="footer-link" href="/dashboard.html">Dashboard</a>
+          </nav>
+
+          <div class="footer-col">
+            <h4 class="footer-title">Contact</h4>
+            <a class="footer-link" href="mailto:info@underwritly.com">info@underwritly.com</a>
+            <p class="footer-note">
+              Prefer a call? Submit an early access request and we will follow up.
+            </p>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p class="footer-copy">Protect admin credentials — treat this like internal tooling.</p>
+        </div>
       </div>
     </footer>
 
