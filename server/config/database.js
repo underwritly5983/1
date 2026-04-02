@@ -34,17 +34,6 @@ const init = async () => {
     await pool.query(schema);
     console.log('✅ Database schema initialized');
 
-    let permissionService = null;
-    const rbacPath = path.join(__dirname, '../schema-rbac.sql');
-    if (fs.existsSync(rbacPath)) {
-      const rbacSchema = fs.readFileSync(rbacPath, 'utf8');
-      await pool.query(rbacSchema);
-      console.log('✅ RBAC schema initialized');
-      permissionService = require('../services/permissionService');
-      await permissionService.seedPermissionsAndRoles();
-      await permissionService.migrateUsersToOrganizations();
-    }
-
     // Ensure test user exists so login works out of the box (e.g. after Docker first run)
     const testEmail = 'test@example.com';
     const testPassword = 'password123';
@@ -59,13 +48,7 @@ const init = async () => {
       const userResult = await pool.query('SELECT id FROM users WHERE email = $1', [testEmail]);
       const userId = userResult.rows[0].id;
       await pool.query('INSERT INTO subscriptions (user_id, tier, status) VALUES ($1, $2, $3)', [userId, 'free', 'active']);
-      if (permissionService) {
-        await permissionService.ensureOwnerOrganization(userId, 'Test Company');
-      }
       console.log('✅ Test user created: test@example.com / password123');
-    } else if (permissionService) {
-      const uid = existing.rows[0].id;
-      await permissionService.ensureOwnerOrganization(uid, 'Test Company');
     }
 
     return pool;

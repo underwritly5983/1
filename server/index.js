@@ -20,7 +20,6 @@ const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const subscriptionRoutes = require('./routes/subscriptions');
 const { router: notificationRoutes } = require('./routes/notifications');
-const rbacRoutes = require('./routes/rbac');
 
 const app = express();
 
@@ -88,7 +87,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/rbac', rbacRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
