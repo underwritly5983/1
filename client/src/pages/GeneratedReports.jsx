@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { Upload } from 'lucide-react'
 import JurisdictionReportLoader from '../components/JurisdictionReportLoader'
 import SourceUploadFileRow from '../components/SourceUploadFileRow'
 import { AppLogo } from '../components/AppLogo'
@@ -11,6 +12,8 @@ const GeneratedReports = () => {
   const [selectedReportId, setSelectedReportId] = useState(null)
   const [selectedPdfIds, setSelectedPdfIds] = useState(new Set())
   const [detailRefreshKey, setDetailRefreshKey] = useState(0)
+  const [uploadingAdditional, setUploadingAdditional] = useState(false)
+  const additionalPdfInputRef = useRef(null)
   const selectedReport = useMemo(
     () => reports.find((r) => r.id === selectedReportId) || null,
     [reports, selectedReportId]
@@ -74,6 +77,35 @@ const GeneratedReports = () => {
       setSelectedPdfIds(new Set())
     } else {
       setSelectedPdfIds(new Set(selectablePdfIds))
+    }
+  }
+
+  const maxSourcePdfs = 4
+  const sourceCount = selectedReport?.sourceFiles?.length ?? 0
+  const canAddMorePdfs = sourceCount < maxSourcePdfs
+
+  const handleAdditionalPdfsSelected = async (e) => {
+    const input = e.target
+    const files = input.files ? Array.from(input.files).filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) : []
+    input.value = ''
+    if (files.length === 0 || !selectedReportId) return
+    const slots = maxSourcePdfs - sourceCount
+    const toSend = files.slice(0, slots)
+    if (files.length > slots) {
+      toast.error(`Only ${slots} more PDF${slots === 1 ? '' : 's'} allowed (4 per summary). Extra files were not sent.`)
+    }
+    setUploadingAdditional(true)
+    try {
+      const formData = new FormData()
+      toSend.forEach((f) => formData.append('files', f))
+      await axios.post(`/reports/generated/${selectedReportId}/add-source-pdfs`, formData)
+      toast.success('Summary updated with your PDF(s).')
+      handleSourceUploadChanged()
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message || 'Failed to upload PDFs'
+      toast.error(msg)
+    } finally {
+      setUploadingAdditional(false)
     }
   }
 
@@ -147,7 +179,8 @@ const GeneratedReports = () => {
                   <span className="font-medium text-gray-800">{selectedReport.report_name}</span>
                   {' · '}
                   These are the files from <strong className="font-medium text-gray-800">Upload Notice of Assessment</strong> that
-                  were used to generate this report. View, rename, delete, or select multiple to remove at once.
+                  were used to generate this report. View, rename, delete, or select multiple to remove at once. After deleting,
+                  upload replacements here (up to four quarters total).
                 </p>
               </div>
               {selectablePdfIds.length > 0 && (
@@ -169,6 +202,29 @@ const GeneratedReports = () => {
                     </button>
                   )}
                 </div>
+              )}
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <input
+                ref={additionalPdfInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                className="hidden"
+                onChange={handleAdditionalPdfsSelected}
+              />
+              <button
+                type="button"
+                disabled={!canAddMorePdfs || uploadingAdditional}
+                onClick={() => additionalPdfInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-lg border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-800 shadow-sm hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4 shrink-0" />
+                {uploadingAdditional ? 'Uploading…' : 'Upload additional PDF'}
+              </button>
+              {!canAddMorePdfs && (
+                <span className="text-xs text-gray-500">Maximum of 4 PDFs reached. Delete one to add another.</span>
               )}
             </div>
 

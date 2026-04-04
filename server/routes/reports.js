@@ -415,6 +415,116 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
   return out;
 }
 
+/**
+ * Rewrite summary PDF + report_data for a generated report from Notice of Assessment IDs (max 4 after sort).
+ * Preserves acceptance/reassessment pairings for source IDs that remain.
+ */
+async function finalizeGeneratedReportUpdate(userId, generatedReportId, reportData, previousFilePath) {
+  const userResult = await db.query(
+    'SELECT company_name, logo_url, brand_color_primary, brand_color_secondary FROM users WHERE id = $1',
+    [userId]
+  );
+  const user = userResult.rows[0];
+  if (!user) throw new Error('User not found');
+  const pdfBuffer = await generateSummaryPDF(reportData, user);
+  const pdfFilename = `summary-${userId}-${generatedReportId}-${Date.now()}.pdf`;
+  const summariesDir = path.join(getUploadsRoot(), 'summaries');
+  if (!fs.existsSync(summariesDir)) {
+    fs.mkdirSync(summariesDir, { recursive: true });
+  }
+  const pdfPath = path.join(summariesDir, pdfFilename);
+  fs.writeFileSync(pdfPath, pdfBuffer);
+  if (previousFilePath) {
+    const prev = resolveStoredUploadPath(previousFilePath);
+    if (prev && fs.existsSync(prev) && prev !== pdfPath) {
+      try {
+        fs.unlinkSync(prev);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+  await db.query(
+    `UPDATE generated_reports SET report_data = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4`,
+    [JSON.stringify(reportData), pdfPath, generatedReportId, userId]
+  );
+}
+
+async function persistGeneratedReportFromSources(userId, generatedRow, sourceReportIds) {
+  const userResult = await db.query(
+    'SELECT company_name, logo_url, brand_color_primary, brand_color_secondary FROM users WHERE id = $1',
+    [userId]
+  );
+  const user = userResult.rows[0];
+  if (!user) throw new Error('User not found');
+
+  const normalized = [...new Set(normalizeSourceReportIds(sourceReportIds))];
+  const oldPairs = parseAcceptancePairMap(generatedRow.report_data);
+
+  if (normalized.length === 0) {
+    const reportData = await generateReport([], user);
+    reportData.sourceReportIds = [];
+    reportData.acceptanceReassessmentBySourceId = {};
+    await finalizeGeneratedReportUpdate(userId, generatedRow.id, reportData, generatedRow.file_path);
+    return;
+  }
+
+  const reportsResult = await db.query(
+    `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+     FROM ifta_reports
+     WHERE id = ANY($1::int[]) AND user_id = $2
+       AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')`,
+    [normalized, userId]
+  );
+  const sorted = sortIftaRowsChronologically(reportsResult.rows);
+  const capped = sorted.slice(0, 4);
+  const idsOrdered = capped.map((r) => r.id);
+
+  const reports = capped.map((r) => ({
+    id: r.id,
+    fileName: r.file_name,
+    quarter: r.quarter_label,
+    year: r.year,
+    summary: r.summary || { summary: 'Processing...', jurisdictions: [] },
+    detectedDate: r.detected_date,
+    rawText: r.raw_text,
+  }));
+
+  const reportData = await generateReport(reports, user);
+  reportData.sourceReportIds = idsOrdered;
+
+  const nextAcc = {};
+  for (const sid of idsOrdered) {
+    if (oldPairs[sid]) nextAcc[String(sid)] = oldPairs[sid];
+  }
+  reportData.acceptanceReassessmentBySourceId = nextAcc;
+
+  await finalizeGeneratedReportUpdate(userId, generatedRow.id, reportData, generatedRow.file_path);
+}
+
+async function regenerateAffectedGeneratedReports(userId, deletedIds) {
+  const deletedSet = new Set(
+    deletedIds.map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n))
+  );
+  if (deletedSet.size === 0) return;
+  const gr = await db.query(
+    `SELECT id, report_data, file_path FROM generated_reports WHERE user_id = $1`,
+    [userId]
+  );
+  for (const row of gr.rows) {
+    const parsed = parseReportDataJson(row.report_data);
+    const ids = normalizeSourceReportIds(parsed.sourceReportIds || []);
+    const affected = ids.some((id) => deletedSet.has(id));
+    if (!affected) continue;
+    const newIds = ids.filter((id) => !deletedSet.has(id));
+    try {
+      await persistGeneratedReportFromSources(userId, row, newIds);
+    } catch (e) {
+      console.error('regenerateAffectedGeneratedReports:', e.message);
+    }
+  }
+}
+
 // Configure multer for IFTA report uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -924,6 +1034,7 @@ const deleteBatchHandler = async (req, res) => {
     }
 
     await db.query('DELETE FROM ifta_reports WHERE id = ANY($1::int[]) AND user_id = $2', [ids, req.user.id]);
+    await regenerateAffectedGeneratedReports(req.user.id, ids);
     const deleted = result.rows.length;
     res.json({ message: `${deleted} report${deleted !== 1 ? 's' : ''} deleted successfully`, deleted });
   } catch (error) {
@@ -1089,8 +1200,9 @@ router.delete('/:id', authenticate, async (req, res) => {
       }
     }
 
-    // Delete from database
-    await db.query('DELETE FROM ifta_reports WHERE id = $1', [req.params.id]);
+    const deletedId = parseInt(req.params.id, 10);
+    await db.query('DELETE FROM ifta_reports WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+    await regenerateAffectedGeneratedReports(req.user.id, [deletedId]);
 
     res.json({ message: 'Report deleted successfully' });
   } catch (error) {
@@ -1252,6 +1364,169 @@ router.get('/generated/list', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch reports' });
   }
 });
+
+// Add Notice of Assessment PDFs to an existing generated summary (at most 4 source PDFs per summary).
+router.post(
+  '/generated/:id/add-source-pdfs',
+  authenticate,
+  (req, res, next) => {
+    upload.array('files', 4)(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({
+            error: 'Maximum 4 PDFs per request.',
+            code: 'LIMIT_FILE_COUNT',
+          });
+        }
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'File size exceeds 10MB limit' });
+        }
+        return res.status(400).json({ error: `Upload error: ${err.message}` });
+      }
+      if (err) {
+        return res.status(400).json({ error: err.message || 'File upload error' });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const generatedId = parseInt(req.params.id, 10);
+      if (Number.isNaN(generatedId)) {
+        return res.status(400).json({ error: 'Invalid report id' });
+      }
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: 'No files uploaded' });
+      }
+
+      const gr = await db.query(
+        `SELECT id, report_data, file_path FROM generated_reports WHERE id = $1 AND user_id = $2`,
+        [generatedId, req.user.id]
+      );
+      if (gr.rows.length === 0) {
+        return res.status(404).json({ error: 'Report not found' });
+      }
+
+      const reportDataObj =
+        typeof gr.rows[0].report_data === 'string'
+          ? JSON.parse(gr.rows[0].report_data)
+          : gr.rows[0].report_data || {};
+      const currentIds = normalizeSourceReportIds(reportDataObj.sourceReportIds || []);
+      const slots = 4 - currentIds.length;
+      if (slots <= 0) {
+        return res.status(400).json({
+          error:
+            'This summary already has 4 Notice of Assessment PDFs. Delete one to upload a replacement.',
+        });
+      }
+      if (req.files.length > slots) {
+        return res.status(400).json({
+          error: `You can add at most ${slots} more PDF(s) (4 per summary total).`,
+          code: 'LIMIT_FILE_COUNT',
+        });
+      }
+
+      const newReportIds = [];
+      for (const file of req.files) {
+        try {
+          const filePath = file.path;
+          const fileName = file.originalname;
+          const fileSize = file.size;
+          const fileBytes = fs.readFileSync(filePath);
+          const pdfData = await parsePDF(filePath);
+          let quarterInfo = extractQuarterInfo(pdfData.firstPageText || '');
+          if (!quarterInfo.quarter || !quarterInfo.year) {
+            quarterInfo = extractQuarterInfo(pdfData.text || '');
+          }
+          const rawTextToStore =
+            pdfData.text.length > 2000000 ? pdfData.text.substring(0, 2000000) : pdfData.text;
+
+          const result = await db.query(
+            `INSERT INTO ifta_reports (user_id, file_name, file_path, file_size, quarter, year, quarter_label, detected_date, raw_text, status, file_blob)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING id, quarter_label, year, detected_date, status`,
+            [
+              req.user.id,
+              fileName,
+              filePath,
+              fileSize,
+              quarterInfo.quarter,
+              quarterInfo.year,
+              quarterInfo.quarter,
+              quarterInfo.detectedDate,
+              rawTextToStore,
+              'processing',
+              fileBytes,
+            ]
+          );
+          const report = result.rows[0];
+          newReportIds.push(report.id);
+
+          await db.query(
+            'INSERT INTO usage_analytics (user_id, event_type, event_data) VALUES ($1, $2, $3)',
+            [req.user.id, 'report_uploaded', JSON.stringify({ reportId: report.id, fileName })]
+          );
+
+          summarizeIFTAReport(pdfData.text, quarterInfo.quarter, quarterInfo.year)
+            .then(async (summary) => {
+              await db.query(
+                'UPDATE ifta_reports SET summary = $1, status = $2 WHERE id = $3',
+                [JSON.stringify(summary), 'completed', report.id]
+              );
+            })
+            .catch(async (error) => {
+              console.error(`Summary processing error for report ${report.id}:`, error);
+              await db.query('UPDATE ifta_reports SET status = $1 WHERE id = $2', ['completed', report.id]);
+            });
+        } catch (error) {
+          console.error(`Error processing ${file.originalname}:`, error);
+          return res.status(400).json({
+            error: error.message || `Failed to process ${file.originalname}`,
+          });
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      let reportsResult = await db.query(
+        `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+         FROM ifta_reports
+         WHERE id = ANY($1::int[]) AND user_id = $2`,
+        [newReportIds, req.user.id]
+      );
+
+      let attempts = 0;
+      const maxAttempts = 10;
+      while (attempts < maxAttempts) {
+        const hasRawText = reportsResult.rows.some((r) => r.raw_text && r.raw_text.length > 100);
+        const allCompleted = reportsResult.rows.every((r) => r.status === 'completed' && r.summary);
+        if (hasRawText || allCompleted || attempts >= maxAttempts - 1) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        attempts += 1;
+        reportsResult = await db.query(
+          `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
+           FROM ifta_reports
+           WHERE id = ANY($1::int[]) AND user_id = $2`,
+          [newReportIds, req.user.id]
+        );
+      }
+
+      const mergedIds = [...currentIds, ...newReportIds];
+      await persistGeneratedReportFromSources(req.user.id, gr.rows[0], mergedIds);
+
+      res.json({
+        message: 'Summary updated with new Notice of Assessment PDF(s).',
+        generatedReportId: generatedId,
+        addedIds: newReportIds,
+      });
+    } catch (error) {
+      console.error('Add source PDFs error:', error);
+      res.status(500).json({ error: error.message || 'Failed to update summary' });
+    }
+  }
+);
 
 // Upload up to 4 Notice of Acceptance/Reassessment PDFs; matched to Notice of Assessment by quarter/year; appended after each NOA on Download Report PDF only.
 router.post(
