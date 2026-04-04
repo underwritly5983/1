@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { FileText, Upload, LogOut, User, BarChart3 } from 'lucide-react'
+import { FileText, Upload, LogOut, User, BarChart3, LayoutDashboard } from 'lucide-react'
 import { AppLogo } from './AppLogo'
 
 const Layout = () => {
@@ -10,9 +10,9 @@ const Layout = () => {
   /** Logged-in broker / user — never the insured name from the report. */
   const topRightName = user?.companyName || user?.email || 'User'
 
+  const isDashboard = location.pathname === '/reports'
   const isUpload = location.pathname.startsWith('/reports/upload')
   const isViewReport =
-    location.pathname === '/reports' ||
     location.pathname === '/reports/generated' ||
     location.pathname.startsWith('/reports/jurisdiction') ||
     location.pathname.startsWith('/reports/latest')
@@ -32,7 +32,11 @@ const Layout = () => {
                 <AppLogo variant="nav" />
                 <span className="sr-only">IFTA Pro</span>
               </Link>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link to="/reports" className={navClass(isDashboard)} title="IFTA summary and source PDFs">
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Dashboard
+                </Link>
                 <Link to="/reports/upload" className={navClass(isUpload)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Upload New IFTAs
