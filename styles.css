@@ -1490,7 +1490,7 @@ body.page-profile-flow #register-invite-only {
   border-radius: 999px;
 }
 
-.dashboard-team-section {
+.dashboard-team-section:not(.dashboard-sidebar) {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
@@ -1562,6 +1562,71 @@ body.page-profile-flow #register-invite-only {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 0.9375rem;
+}
+
+.dashboard-team-invite-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.dashboard-team-invite-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.dashboard-dialog {
+  margin: auto;
+  padding: 1.35rem 1.25rem 1.2rem;
+  max-width: min(22rem, calc(100% - 2rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.22);
+  color: var(--text);
+}
+
+.dashboard-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.dashboard-dialog-title {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.dashboard-dialog-body {
+  margin: 0 0 1.15rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.dashboard-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.dashboard-dialog--wide {
+  max-width: min(32rem, calc(100% - 2rem));
+}
+
+body.page-dashboard .dashboard-dialog .form-row {
+  margin-bottom: 1rem;
 }
 
 .dashboard-team-msg {
@@ -1690,9 +1755,10 @@ body.page-profile-flow #register-invite-only {
 .dashboard-insured-actions {
   display: inline-flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
 }
 
 .dashboard-dl {
@@ -1723,16 +1789,288 @@ body.page-profile-flow #register-invite-only {
   color: var(--text);
 }
 
-/* Broker / insured flow pages: wider column + padding so tables and actions fit without cramped horizontal scroll */
-body.page-dashboard .container.narrow {
-  max-width: 56rem;
-  width: min(56rem, calc(100% - 3rem));
-  margin-inline: auto;
-  padding-inline: clamp(1.25rem, 5vw, 2rem);
+/* Dashboard: wide shell, main column + optional team sidebar */
+body.page-dashboard .container.dashboard-page {
+  width: min(1600px, calc(100% - 2rem));
+  max-width: 1600px;
+}
+
+body.page-dashboard .dashboard-page-header {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+body.page-dashboard .dashboard-page-title {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-heading);
+  font-size: clamp(1.35rem, 2.5vw, 1.6rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+body.page-dashboard .dashboard-page-lead {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+body.page-dashboard .dashboard-layout {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  body.page-dashboard .dashboard-layout:has(.dashboard-sidebar:not(.hidden)) {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  }
+}
+
+body.page-dashboard .dashboard-profile-strip {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 0 1.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+
+body.page-dashboard .dashboard-profile-strip__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.1rem 2rem;
+}
+
+body.page-dashboard .dashboard-profile-strip__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: min(100%, 18rem);
+}
+
+body.page-dashboard .dashboard-profile-strip__logo .dashboard-logo {
+  max-height: 48px;
+}
+
+body.page-dashboard .dashboard-profile-strip__name {
+  margin: 0 0 0.2rem;
+  font-size: clamp(1.15rem, 2.2vw, 1.35rem);
+}
+
+body.page-dashboard .dashboard-profile-strip__email {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+body.page-dashboard .dashboard-profile-strip__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.85rem 1.5rem;
+  margin: 0;
+}
+
+body.page-dashboard .dashboard-profile-strip__pair {
+  margin: 0;
+  min-width: 4.5rem;
+}
+
+body.page-dashboard .dashboard-profile-strip__pair dt {
+  margin: 0 0 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-subtle);
+}
+
+body.page-dashboard .dashboard-profile-strip__pair dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+body.page-dashboard .dashboard-layout__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+body.page-dashboard .dashboard-layout__main > .dashboard-panel--insureds {
+  margin-top: 0;
+}
+
+body.page-dashboard .dashboard-panel {
+  margin-top: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(1.35rem, 3vw, 1.75rem) clamp(1.25rem, 3vw, 1.65rem);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+body.page-dashboard .dashboard-panel--insureds {
+  padding-top: clamp(1.5rem, 3.5vw, 2rem);
+}
+
+body.page-dashboard .dashboard-section-title {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-heading);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+body.page-dashboard .dashboard-section-title--primary {
+  font-size: clamp(1.25rem, 2.2vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body.page-dashboard .dashboard-reports-lead {
+  margin-bottom: 1rem;
+  line-height: 1.55;
+}
+
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta {
+  margin-top: 1rem;
+}
+
+/* Reports: IFTA launch as a compact control (not a large hero tile) */
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  width: auto;
+  max-width: none;
+  padding: 0.45rem 0.85rem 0.5rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 26%, transparent),
+    0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch-graphic {
+  width: 2rem;
+  height: 1.75rem;
+}
+
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch-svg {
+  max-height: 1.75rem;
+}
+
+body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-shadow: none;
+}
+
+@media (max-width: 480px) {
+  body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch {
+    max-width: none;
+    padding: 0.45rem 0.8rem 0.5rem;
+  }
+
+  body.page-dashboard .dashboard-panel--reports .dashboard-ifta-launch-label {
+    font-size: 0.8125rem;
+  }
+}
+
+body.page-dashboard .dashboard-sidebar.dashboard-team-section {
+  margin-top: 0;
+  padding: 1.25rem 1.1rem;
+  border-top: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 1024px) {
+  body.page-dashboard .dashboard-sidebar.dashboard-team-section {
+    position: sticky;
+    top: calc(var(--header-h, 4rem) + 1rem);
+  }
+}
+
+body.page-dashboard .dashboard-sidebar-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-team-lead {
+  max-width: none;
+  font-size: 0.8125rem;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-org-stats {
+  flex-direction: column;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-stat-card {
+  min-width: 0;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-team-columns {
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-team-invite-textarea {
+  min-width: 0;
+  width: 100%;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-team-invite-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body.page-dashboard .dashboard-sidebar .dashboard-team-invite-form .dashboard-team-invite-submit {
+  width: 100%;
+}
+
+body.page-dashboard .dashboard-insured-btn {
+  padding: 0.2rem 0.42rem;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  font-weight: 500;
+  min-height: 0;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+body.page-dashboard .dashboard-insured-ifta-icon {
+  font-size: 0.7rem;
+  margin-right: 0.12rem;
+  vertical-align: middle;
+}
+
+body.page-dashboard .dashboard-insured-actions {
+  gap: 0.2rem;
 }
 
 body.page-dashboard .dashboard-card {
-  padding: clamp(1.5rem, 4vw, 2.25rem) clamp(1.35rem, 3.5vw, 2rem);
+  padding: clamp(1.25rem, 3vw, 1.65rem) clamp(1.25rem, 3vw, 1.65rem);
 }
 
 body.page-dashboard .dashboard-dl-row {
@@ -1746,85 +2084,123 @@ body.page-dashboard .dashboard-dl-row dd {
   overflow-wrap: anywhere;
 }
 
+body.page-dashboard .dashboard-insureds-lead {
+  max-width: none;
+}
+
 body.page-dashboard .dashboard-insureds-table-wrap {
   margin-top: 1rem;
-  padding: 0.5rem 0.25rem;
+  padding: 0.35rem 0.2rem;
   border-radius: var(--radius);
   -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
 }
 
 body.page-dashboard .dashboard-insureds-table {
-  min-width: 64rem;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  table-layout: auto;
+  border-collapse: collapse;
 }
 
 body.page-dashboard .dashboard-insureds-table th,
 body.page-dashboard .dashboard-insureds-table td {
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.75rem;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  vertical-align: middle;
 }
 
 body.page-dashboard .dashboard-insureds-table thead th {
   vertical-align: bottom;
+  font-size: 0.8125rem;
 }
 
 body.page-dashboard .dashboard-insureds-table tbody td {
-  vertical-align: top;
+  vertical-align: middle;
 }
 
-/* Column breathing room: avoid squishing name / email / status into narrow strips */
+/* Prefer wider columns before wrapping the whole table (horizontal scroll). */
 body.page-dashboard .dashboard-insureds-table th:nth-child(1),
 body.page-dashboard .dashboard-insureds-table td:nth-child(1) {
-  min-width: 10rem;
+  min-width: 12rem;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(2),
 body.page-dashboard .dashboard-insureds-table td:nth-child(2) {
-  min-width: 14rem;
-  word-break: normal;
-  overflow-wrap: anywhere;
+  min-width: 18rem;
+}
+
+body.page-dashboard .dashboard-insured-email-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+}
+
+body.page-dashboard .dashboard-insured-email-text {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+body.page-dashboard .dashboard-insured-edit-email {
+  flex: 0 0 auto;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(3),
 body.page-dashboard .dashboard-insureds-table td:nth-child(3) {
-  min-width: 11rem;
+  min-width: 18rem;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(4),
 body.page-dashboard .dashboard-insureds-table td:nth-child(4) {
-  min-width: 10rem;
+  min-width: 12rem;
   font-size: 0.8125rem;
-  word-break: break-word;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(5),
 body.page-dashboard .dashboard-insureds-table td:nth-child(5) {
-  min-width: 3.75rem;
+  min-width: 3.5rem;
   text-align: center;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(6),
 body.page-dashboard .dashboard-insureds-table td:nth-child(6) {
-  min-width: 6.5rem;
-  white-space: nowrap;
+  min-width: 5.5rem;
 }
 
 body.page-dashboard .dashboard-insureds-table th:nth-child(7),
 body.page-dashboard .dashboard-insureds-table td:nth-child(7) {
-  min-width: 11rem;
+  min-width: 13rem;
 }
 
-body.page-dashboard .dashboard-insured-actions {
-  gap: 0.5rem;
+body.page-dashboard .dashboard-insured-ifta {
+  white-space: nowrap;
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  body.page-dashboard .dashboard-insureds-table th,
+  body.page-dashboard .dashboard-insureds-table td {
+    padding: 0.55rem 0.4rem;
+    font-size: 0.8125rem;
+  }
+
+  body.page-dashboard .dashboard-insureds-table thead th {
+    font-size: 0.75rem;
+  }
 }
 
 @media (max-width: 520px) {
   body.page-dashboard .dashboard-insureds-table {
-    font-size: 0.8125rem;
-    min-width: 60rem;
+    font-size: 0.75rem;
   }
 
   body.page-dashboard .dashboard-insureds-table th,
   body.page-dashboard .dashboard-insureds-table td {
-    padding: 0.65rem 0.85rem;
+    padding: 0.5rem 0.35rem;
   }
 }
 

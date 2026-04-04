@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=10" />
+    <link rel="stylesheet" href="styles.css?v=17" />
   </head>
   <body class="page-register page-dashboard">
     <div id="api-env-warning" class="dev-api-warning hidden" role="status" aria-live="polite">
@@ -39,9 +39,9 @@
       </div>
     </header>
 
-    <main id="top">
+    <main id="top" class="dashboard-main-outer">
       <section class="profile-registration profile-registration--lead">
-        <div class="container narrow">
+        <div class="container dashboard-page">
           <div id="dashboard-loading" class="dashboard-state">
             <p class="section-sub">Loading your account…</p>
           </div>
@@ -60,58 +60,174 @@
           </div>
 
           <div id="dashboard-content" class="hidden">
-            <header class="section-head section-head--center">
-              <h2 class="section-title">Your dashboard</h2>
-              <p class="section-sub">Welcome back. This is your home base while we expand the product.</p>
+            <header class="dashboard-page-header">
+              <h2 class="dashboard-page-title">Your dashboard</h2>
+              <p class="dashboard-page-lead">Welcome back. Your insured list and reports are below.</p>
             </header>
 
-            <div class="dashboard-card">
-              <div class="dashboard-card-header">
-                <div class="dashboard-identity">
-                  <div id="dashboard-logo-wrap" class="dashboard-logo-wrap hidden">
-                    <img id="dashboard-logo" alt="" width="120" height="60" class="dashboard-logo" />
-                  </div>
-                  <div>
-                    <p class="dashboard-name" id="dashboard-name"></p>
-                    <p class="dashboard-meta" id="dashboard-email"></p>
+            <div class="dashboard-layout">
+              <div class="dashboard-profile-strip" aria-label="Your account">
+                <div class="dashboard-profile-strip__inner">
+                  <div class="dashboard-profile-strip__identity">
+                    <div id="dashboard-logo-wrap" class="dashboard-logo-wrap dashboard-profile-strip__logo hidden">
+                      <img id="dashboard-logo" alt="" width="120" height="60" class="dashboard-logo" />
+                    </div>
+                    <div>
+                      <p class="dashboard-name dashboard-profile-strip__name" id="dashboard-name"></p>
+                      <p class="dashboard-meta dashboard-profile-strip__email" id="dashboard-email"></p>
+                    </div>
                   </div>
                 </div>
               </div>
-              <dl class="dashboard-dl">
-                <div class="dashboard-dl-row">
-                  <dt>Company</dt>
-                  <dd id="dashboard-company">—</dd>
-                </div>
-                <div class="dashboard-dl-row">
-                  <dt>Role</dt>
-                  <dd id="dashboard-role">—</dd>
-                </div>
-                <div class="dashboard-dl-row">
-                  <dt>Phone</dt>
-                  <dd id="dashboard-phone">—</dd>
-                </div>
-              </dl>
 
-              <div id="dashboard-team-section" class="dashboard-team-section hidden" aria-labelledby="dashboard-team-heading">
-                <h3 id="dashboard-team-heading" class="dashboard-subtitle">Organization &amp; team</h3>
+              <div class="dashboard-layout__main">
+                <section class="dashboard-panel dashboard-panel--insureds" id="dashboard-insureds-block" aria-labelledby="insureds-heading">
+                  <h3 id="insureds-heading" class="dashboard-section-title dashboard-section-title--primary">Insured clients</h3>
+                  <p class="dashboard-meta dashboard-insureds-lead">
+                    Add an insured to send a secure code and upload link. Use the <strong>IFTA</strong> action on a row to
+                    open IFTA Summary with that insured’s documents. Broader IFTA tools live under
+                    <strong>Reports</strong> below.
+                  </p>
+                  <p class="dashboard-actions">
+                    <a class="btn btn-primary" href="/create-insured.html">Create an Insured</a>
+                  </p>
+                  <div id="insureds-loading" class="dashboard-meta hidden">Loading insured list…</div>
+                  <p id="insureds-error" class="field-error hidden" role="alert"></p>
+                  <div id="insureds-table-wrap" class="dashboard-insureds-table-wrap hidden">
+                    <table class="dashboard-insureds-table" aria-label="Insured clients">
+                      <thead>
+                        <tr>
+                          <th scope="col">Insured</th>
+                          <th scope="col">Email</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Added by</th>
+                          <th scope="col">Files</th>
+                          <th scope="col">IFTA Summary</th>
+                          <th scope="col">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="insureds-tbody"></tbody>
+                    </table>
+                  </div>
+                  <p id="insureds-empty" class="dashboard-meta hidden">No insured clients yet.</p>
+                </section>
+
+                <section class="dashboard-panel dashboard-panel--reports" aria-labelledby="reports-heading">
+                  <h3 id="reports-heading" class="dashboard-section-title">Reports</h3>
+                  <p class="dashboard-meta dashboard-reports-lead">
+                    Fuel tax and mileage reporting (separate from the per-insured actions in the table above).
+                  </p>
+                  <div class="dashboard-ifta" id="dashboard-ifta-locked">
+                    <p class="dashboard-meta">
+                      IFTA Summary access is currently disabled for your account. Your admin can enable
+                      the IFTA deployment flag or grant the <code>ifta</code> permission for your profile.
+                    </p>
+                  </div>
+                  <div class="dashboard-ifta hidden" id="dashboard-ifta-allowed">
+                    <p class="dashboard-meta dashboard-ifta-kicker">Fuel tax &amp; mileage reporting</p>
+                    <button type="button" class="dashboard-ifta-launch" id="dashboard-ifta-open">
+                      <span class="dashboard-ifta-launch-graphic" aria-hidden="true">
+                        <svg
+                          class="dashboard-ifta-launch-svg"
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 96 72"
+                          fill="none"
+                        >
+                          <line
+                            x1="4"
+                            y1="60"
+                            x2="92"
+                            y2="60"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            opacity="0.3"
+                          />
+                          <rect
+                            x="32"
+                            y="54"
+                            width="32"
+                            height="7"
+                            rx="2"
+                            fill="currentColor"
+                            opacity="0.45"
+                          />
+                          <rect
+                            x="34"
+                            y="22"
+                            width="28"
+                            height="34"
+                            rx="5"
+                            fill="currentColor"
+                            opacity="0.93"
+                          />
+                          <rect
+                            x="32"
+                            y="12"
+                            width="32"
+                            height="14"
+                            rx="4"
+                            fill="currentColor"
+                            opacity="0.92"
+                          />
+                          <rect
+                            x="40"
+                            y="16"
+                            width="16"
+                            height="6"
+                            rx="2"
+                            fill="#fff"
+                            opacity="0.42"
+                          />
+                          <path
+                            d="M62 36c12 0 18 8 18 16v6"
+                            stroke="currentColor"
+                            stroke-width="3.2"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            opacity="0.95"
+                          />
+                          <path
+                            d="M80 58l8-2 2 8-10 2.5z"
+                            fill="currentColor"
+                            opacity="0.95"
+                          />
+                          <circle cx="48" cy="42" r="3" fill="#fff" opacity="0.2" />
+                        </svg>
+                      </span>
+                      <span class="dashboard-ifta-launch-label">IFTA Summary</span>
+                    </button>
+                    <p class="dashboard-meta dashboard-ifta-hint hidden" id="dashboard-ifta-launch-err"></p>
+                  </div>
+                </section>
+              </div>
+
+              <aside
+                id="dashboard-team-section"
+                class="dashboard-sidebar dashboard-team-section hidden"
+                aria-labelledby="dashboard-team-heading"
+              >
+                <h3 id="dashboard-team-heading" class="dashboard-sidebar-title">Team &amp; brokers</h3>
                 <p class="dashboard-meta dashboard-team-lead">
-                  Invite brokers on your team. They share your insured list and IFTA access; only you can remove insured contacts
-                  or delete team members.
+                  Invite sub-users (brokers) on your team. They share your insured list and IFTA access; only you can
+                  remove insured contacts or delete team members.
                 </p>
                 <div id="dashboard-team-stats" class="dashboard-org-stats" aria-label="Organization activity"></div>
                 <div class="dashboard-team-invite-row">
                   <form id="dashboard-team-invite-form" class="dashboard-team-invite-form">
-                    <label class="sr-only" for="dashboard-team-invite-email">Team member email</label>
-                    <input
-                      type="email"
-                      id="dashboard-team-invite-email"
-                      name="email"
-                      required
+                    <label class="dashboard-team-invite-label" for="dashboard-team-invite-emails"
+                      >Invite by email (one per line, or comma-separated)</label
+                    >
+                    <textarea
+                      id="dashboard-team-invite-emails"
+                      name="emails"
+                      rows="3"
                       autocomplete="email"
-                      placeholder="colleague@company.com"
-                      class="dashboard-team-invite-input"
-                    />
-                    <button type="submit" class="btn btn-primary btn-sm">Invite team member</button>
+                      placeholder="colleague@company.com&#10;broker2@company.com"
+                      class="dashboard-team-invite-textarea"
+                    ></textarea>
+                    <button type="submit" class="btn btn-primary btn-sm dashboard-team-invite-submit">Send invites</button>
                   </form>
                   <p id="dashboard-team-invite-msg" class="dashboard-meta dashboard-team-msg hidden" role="status"></p>
                 </div>
@@ -125,126 +241,52 @@
                     <ul id="dashboard-team-invites" class="dashboard-team-list dashboard-team-list--muted"></ul>
                   </div>
                 </div>
-              </div>
-
-              <div class="dashboard-insureds" id="dashboard-insureds-block">
-                <h3 class="dashboard-subtitle">Insured clients</h3>
-                <p class="dashboard-meta dashboard-insureds-lead">
-                  Add an insured contact to send them a secure code, then have them upload IFTA reports for
-                  your company. After files are received, use the <strong>IFTA</strong> button on that
-                  insured’s row to open IFTA Summary with their documents (not the large IFTA card below).
-                </p>
-                <p class="dashboard-actions">
-                  <a class="btn btn-primary" href="/create-insured.html">Create an Insured</a>
-                </p>
-                <div id="insureds-loading" class="dashboard-meta hidden">Loading insured list…</div>
-                <p id="insureds-error" class="field-error hidden" role="alert"></p>
-                <div id="insureds-table-wrap" class="dashboard-insureds-table-wrap hidden">
-                  <table class="dashboard-insureds-table" aria-label="Insured clients">
-                    <thead>
-                      <tr>
-                        <th scope="col">Name</th>
-                        <th scope="col">Email</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Added by</th>
-                        <th scope="col">Files</th>
-                        <th scope="col">IFTA Summary</th>
-                        <th scope="col">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="insureds-tbody"></tbody>
-                  </table>
-                </div>
-                <p id="insureds-empty" class="dashboard-meta hidden">No insured clients yet.</p>
-              </div>
-              <div class="dashboard-ifta" id="dashboard-ifta-locked">
-                <p class="dashboard-meta">
-                  IFTA Summary access is currently disabled for your account. Your admin can enable
-                  the IFTA deployment flag or grant the <code>ifta</code> permission for your profile.
-                </p>
-              </div>
-              <div class="dashboard-ifta hidden" id="dashboard-ifta-allowed">
-                <p class="dashboard-meta dashboard-ifta-kicker">Fuel tax &amp; mileage reporting</p>
-                <button type="button" class="dashboard-ifta-launch" id="dashboard-ifta-open">
-                  <span class="dashboard-ifta-launch-graphic" aria-hidden="true">
-                    <svg
-                      class="dashboard-ifta-launch-svg"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 96 72"
-                      fill="none"
-                    >
-                      <line
-                        x1="4"
-                        y1="60"
-                        x2="92"
-                        y2="60"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        opacity="0.3"
-                      />
-                      <rect
-                        x="32"
-                        y="54"
-                        width="32"
-                        height="7"
-                        rx="2"
-                        fill="currentColor"
-                        opacity="0.45"
-                      />
-                      <rect
-                        x="34"
-                        y="22"
-                        width="28"
-                        height="34"
-                        rx="5"
-                        fill="currentColor"
-                        opacity="0.93"
-                      />
-                      <rect
-                        x="32"
-                        y="12"
-                        width="32"
-                        height="14"
-                        rx="4"
-                        fill="currentColor"
-                        opacity="0.92"
-                      />
-                      <rect
-                        x="40"
-                        y="16"
-                        width="16"
-                        height="6"
-                        rx="2"
-                        fill="#fff"
-                        opacity="0.42"
-                      />
-                      <path
-                        d="M62 36c12 0 18 8 18 16v6"
-                        stroke="currentColor"
-                        stroke-width="3.2"
-                        fill="none"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        opacity="0.95"
-                      />
-                      <path
-                        d="M80 58l8-2 2 8-10 2.5z"
-                        fill="currentColor"
-                        opacity="0.95"
-                      />
-                      <circle cx="48" cy="42" r="3" fill="#fff" opacity="0.2" />
-                    </svg>
-                  </span>
-                  <span class="dashboard-ifta-launch-label">IFTA Summary</span>
-                </button>
-                <p class="dashboard-meta dashboard-ifta-hint hidden" id="dashboard-ifta-launch-err"></p>
-              </div>
+              </aside>
             </div>
           </div>
         </div>
       </section>
     </main>
+
+    <dialog
+      id="dashboard-delete-insured-dialog"
+      class="dashboard-dialog"
+      aria-labelledby="dashboard-delete-insured-title"
+    >
+      <h3 id="dashboard-delete-insured-title" class="dashboard-dialog-title">Remove this insured?</h3>
+      <p class="dashboard-dialog-body">
+        This removes the insured from your list. They will no longer appear here. This cannot be undone.
+      </p>
+      <div class="dashboard-dialog-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="dashboard-delete-insured-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="dashboard-delete-insured-confirm">Delete</button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="dashboard-edit-email-dialog"
+      class="dashboard-dialog dashboard-dialog--wide"
+      aria-labelledby="dashboard-edit-email-title"
+    >
+      <h3 id="dashboard-edit-email-title" class="dashboard-dialog-title">Edit insured email</h3>
+      <p class="dashboard-dialog-body">
+        Update the contact email for this insured. Leave blank to clear the email on file.
+      </p>
+      <div class="form-row">
+        <label for="dashboard-edit-email-input">Email address</label>
+        <input
+          type="email"
+          id="dashboard-edit-email-input"
+          name="insured-email"
+          autocomplete="email"
+          placeholder="name@example.com"
+        />
+      </div>
+      <div class="dashboard-dialog-actions">
+        <button type="button" class="btn btn-ghost btn-sm" id="dashboard-edit-email-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="dashboard-edit-email-save">Save</button>
+      </div>
+    </dialog>
 
     <footer class="site-footer">
       <div class="container footer-inner">
@@ -293,6 +335,6 @@
       </div>
     </footer>
 
-    <script src="dashboard-page.js"></script>
+    <script src="dashboard-page.js?v=17"></script>
   </body>
 </html>

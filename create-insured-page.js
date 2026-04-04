@@ -32,6 +32,30 @@
     var name = document.getElementById("insured-name");
     var email = document.getElementById("insured-email");
     var phone = document.getElementById("insured-phone");
+    var nameV = name ? String(name.value || "").trim() : "";
+    var emailV = email ? String(email.value || "").trim() : "";
+    var phoneV = phone ? String(phone.value || "").trim() : "";
+    if (!nameV || nameV.length > 200) {
+      if (errEl) {
+        errEl.textContent = "Enter a valid insured name.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+    if (emailV && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailV)) {
+      if (errEl) {
+        errEl.textContent = "Enter a valid email address.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+    if (emailV && (!phoneV || phoneV.length < 7)) {
+      if (errEl) {
+        errEl.textContent = "Enter a phone number (at least 7 digits) when an email is provided.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
     if (submitBtn) submitBtn.disabled = true;
     fetch("/api/session", {
       method: "POST",
@@ -40,9 +64,9 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "create",
-        name: name ? name.value : "",
-        email: email ? email.value : "",
-        phone: phone ? phone.value : "",
+        name: nameV,
+        email: emailV,
+        phone: phoneV,
       }),
     })
       .then(function (res) {

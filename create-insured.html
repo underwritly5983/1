@@ -39,8 +39,8 @@
           <header class="section-head section-head--center">
             <h2 class="section-title">Create an Insured</h2>
             <p class="section-sub">
-              We will email them a verification code and a secure link. Their phone number is used for
-              multi-factor authentication alongside email.
+              You can create a record with <strong>name only</strong> (no email), or add email and phone to send a
+              verification code and invite them to upload through the portal.
             </p>
           </header>
 
@@ -50,16 +50,16 @@
               <input type="text" id="insured-name" name="name" required maxlength="200" autocomplete="name" />
             </div>
             <div class="form-row">
-              <label for="insured-email">Email address</label>
-              <input type="email" id="insured-email" name="email" required autocomplete="email" />
+              <label for="insured-email">Email address <span class="text-muted">(optional)</span></label>
+              <input type="email" id="insured-email" name="email" autocomplete="email" />
             </div>
             <div class="form-row">
-              <label for="insured-phone">Phone number (MFA)</label>
-              <input type="tel" id="insured-phone" name="phone" required autocomplete="tel" />
+              <label for="insured-phone">Phone number <span class="text-muted">(required if email is provided)</span></label>
+              <input type="tel" id="insured-phone" name="phone" autocomplete="tel" />
             </div>
             <p class="field-error form-submit-error hidden" id="create-insured-error" role="alert"></p>
             <button type="submit" class="btn btn-primary btn-block" id="create-insured-submit">
-              Send verification
+              Create insured
             </button>
           </form>
 

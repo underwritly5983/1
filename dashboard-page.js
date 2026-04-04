@@ -11,9 +11,6 @@
   var insuredsEmptyEl = document.getElementById("insureds-empty");
   var nameEl = document.getElementById("dashboard-name");
   var emailEl = document.getElementById("dashboard-email");
-  var companyEl = document.getElementById("dashboard-company");
-  var roleEl = document.getElementById("dashboard-role");
-  var phoneEl = document.getElementById("dashboard-phone");
   var logoWrap = document.getElementById("dashboard-logo-wrap");
   var logoImg = document.getElementById("dashboard-logo");
   var iftaLockedEl = document.getElementById("dashboard-ifta-locked");
@@ -25,8 +22,17 @@
   var teamListEl = document.getElementById("dashboard-team-list");
   var teamInvitesEl = document.getElementById("dashboard-team-invites");
   var teamInviteForm = document.getElementById("dashboard-team-invite-form");
-  var teamInviteEmail = document.getElementById("dashboard-team-invite-email");
+  var teamInviteEmailsEl = document.getElementById("dashboard-team-invite-emails");
   var teamInviteMsg = document.getElementById("dashboard-team-invite-msg");
+  var deleteInsuredDialog = document.getElementById("dashboard-delete-insured-dialog");
+  var deleteInsuredCancelBtn = document.getElementById("dashboard-delete-insured-cancel");
+  var deleteInsuredConfirmBtn = document.getElementById("dashboard-delete-insured-confirm");
+  var pendingDeleteInsuredId = null;
+  var editEmailDialog = document.getElementById("dashboard-edit-email-dialog");
+  var editEmailInput = document.getElementById("dashboard-edit-email-input");
+  var editEmailCancelBtn = document.getElementById("dashboard-edit-email-cancel");
+  var editEmailSaveBtn = document.getElementById("dashboard-edit-email-save");
+  var pendingEditInsuredId = null;
 
   var currentUser = null;
 
@@ -85,13 +91,16 @@
       var iftaCell = "—";
       if (iftaOk) {
         iftaCell =
-          '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-ifta" data-insured-id="' +
+          '<button type="button" class="btn btn-ghost dashboard-insured-btn dashboard-insured-ifta" data-insured-id="' +
           esc(String(id)) +
           '" title="Open IFTA Summary with this insured">' +
           '<span class="dashboard-insured-ifta-icon" aria-hidden="true">⛽</span> IFTA</button>';
       }
       var canResend =
-        st === "pending_mfa" || st === "awaiting_upload" || st === "completed";
+        st === "pending_mfa" ||
+        st === "awaiting_upload" ||
+        st === "completed" ||
+        st === "broker_managed";
       var resendTitle = !canResend
         ? "Resend not available for this status"
         : st === "pending_mfa"
@@ -100,7 +109,7 @@
             ? "Resend upload link email"
             : "Send a friendly reminder with a fresh upload link";
       var resendBtn =
-        '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-resend" data-insured-id="' +
+        '<button type="button" class="btn btn-ghost dashboard-insured-btn dashboard-insured-resend" data-insured-id="' +
         esc(String(id)) +
         '"' +
         (canResend ? "" : " disabled") +
@@ -109,7 +118,7 @@
         '">Resend email</button>';
       var canDel = !user || user.canDeleteInsured !== false;
       var deleteBtn = canDel
-        ? '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-delete" data-insured-id="' +
+        ? '<button type="button" class="btn btn-ghost dashboard-insured-btn dashboard-insured-delete" data-insured-id="' +
           esc(String(id)) +
           '" title="Remove this insured from your list">Delete</button>'
         : "";
@@ -126,13 +135,35 @@
         typeof r.uploadCount === "number" && r.uploadCount > 0
           ? String(r.uploadCount)
           : "—";
+      var rawEmail = r.email && String(r.email).trim() ? String(r.email).trim() : "";
+      var emailDisplay = rawEmail ? esc(rawEmail) : "—";
+      var editEmailBtn =
+        '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-btn dashboard-insured-edit-email" ' +
+        'data-insured-id="' +
+        esc(String(id)) +
+        '" data-email="' +
+        escAttr(rawEmail) +
+        '" title="Edit email address">Edit</button>';
+      var emailCell =
+        '<div class="dashboard-insured-email-cell">' +
+        '<span class="dashboard-insured-email-text">' +
+        emailDisplay +
+        "</span>" +
+        editEmailBtn +
+        "</div>";
+      var statusLine = esc(r.statusLabel || r.status);
+      if (r.lastReportSource === "broker_ifta") {
+        statusLine += " · Last reports: broker (IFTA app)";
+      } else if (r.lastReportSource === "insured_portal") {
+        statusLine += " · Last reports: insured (portal)";
+      }
       var tr =
         "<tr><td>" +
         esc(r.name) +
         "</td><td>" +
-        esc(r.email) +
+        emailCell +
         "</td><td>" +
-        esc(r.statusLabel || r.status) +
+        statusLine +
         "</td><td>" +
         addedBy +
         "</td><td>" +
@@ -206,9 +237,6 @@
       }
     }
     if (emailEl) emailEl.textContent = (user && user.email) || "";
-    if (companyEl) companyEl.textContent = (user && user.company) || "—";
-    if (roleEl) roleEl.textContent = (user && user.role) || "—";
-    if (phoneEl) phoneEl.textContent = (user && user.phone) || "—";
 
     var logo = user && user.logoDataUrl;
     if (logo && logoImg && logoWrap) {
@@ -347,6 +375,149 @@
         teamInviteMsg.classList.add("hidden");
       }, 8000);
     }
+  }
+
+  function parseInviteEmails(raw) {
+    var parts = String(raw || "").split(/[\s,;]+/);
+    var valid = [];
+    var invalid = [];
+    var seen = {};
+    var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (var i = 0; i < parts.length; i++) {
+      var token = parts[i].trim();
+      if (!token) continue;
+      var em = token.toLowerCase();
+      if (seen[em]) continue;
+      seen[em] = true;
+      if (!re.test(em)) {
+        invalid.push(token);
+        continue;
+      }
+      valid.push(em);
+    }
+    return { valid: valid, invalid: invalid };
+  }
+
+  function runDeleteInsured(did) {
+    if (!did) return;
+    if (deleteInsuredConfirmBtn) deleteInsuredConfirmBtn.disabled = true;
+    fetch("/api/session", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_insured", insuredId: parseInt(did, 10) }),
+    })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var data = {};
+          if (text) {
+            try {
+              data = JSON.parse(text);
+            } catch (ignore) {
+              /* non-JSON */
+            }
+          }
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.ok === true) {
+          refreshInsureds();
+          return;
+        }
+        var msg = (result.data && result.data.error) || "Could not delete insured.";
+        if (insuredsErrorEl) {
+          insuredsErrorEl.textContent = msg;
+          insuredsErrorEl.classList.remove("hidden");
+        } else {
+          alert(msg);
+        }
+      })
+      .catch(function () {
+        if (insuredsErrorEl) {
+          insuredsErrorEl.textContent = "Network error.";
+          insuredsErrorEl.classList.remove("hidden");
+        } else {
+          alert("Network error.");
+        }
+      })
+      .finally(function () {
+        if (deleteInsuredConfirmBtn) deleteInsuredConfirmBtn.disabled = false;
+        if (deleteInsuredDialog) deleteInsuredDialog.close();
+        pendingDeleteInsuredId = null;
+      });
+  }
+
+  function runSaveInsuredEmail() {
+    var did = pendingEditInsuredId;
+    if (!did || !editEmailInput) return;
+    if (editEmailSaveBtn) editEmailSaveBtn.disabled = true;
+    if (insuredsErrorEl) {
+      insuredsErrorEl.classList.add("hidden");
+      insuredsErrorEl.textContent = "";
+    }
+    var val = editEmailInput.value.trim();
+    fetch("/api/session", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update_insured_email",
+        insuredId: parseInt(did, 10),
+        email: val,
+      }),
+    })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var data = {};
+          if (text) {
+            try {
+              data = JSON.parse(text);
+            } catch (ignore) {
+              /* non-JSON */
+            }
+          }
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.ok === true) {
+          if (editEmailDialog) editEmailDialog.close();
+          pendingEditInsuredId = null;
+          return refreshInsureds().then(function () {
+            if (insuredsErrorEl) {
+              insuredsErrorEl.textContent = "Email updated.";
+              insuredsErrorEl.classList.remove("hidden", "field-error");
+              insuredsErrorEl.style.color = "#15803d";
+              setTimeout(function () {
+                insuredsErrorEl.classList.add("hidden", "field-error");
+                insuredsErrorEl.style.color = "";
+              }, 5000);
+            }
+          });
+        }
+        var msg = (result.data && result.data.error) || "Could not update email.";
+        if (insuredsErrorEl) {
+          insuredsErrorEl.textContent = msg;
+          insuredsErrorEl.classList.remove("hidden");
+          insuredsErrorEl.classList.add("field-error");
+        } else {
+          alert(msg);
+        }
+      })
+      .catch(function () {
+        if (insuredsErrorEl) {
+          insuredsErrorEl.textContent = "Network error.";
+          insuredsErrorEl.classList.remove("hidden");
+        } else {
+          alert("Network error.");
+        }
+      })
+      .finally(function () {
+        if (editEmailSaveBtn) editEmailSaveBtn.disabled = false;
+      });
   }
 
   fetch("/api/session?include=insureds", { method: "GET", cache: "no-store", credentials: "same-origin" })
@@ -497,63 +668,40 @@
         return;
       }
 
+      var editMailBtn =
+        e.target && e.target.closest && e.target.closest(".dashboard-insured-edit-email");
+      if (editMailBtn) {
+        var eid = editMailBtn.getAttribute("data-insured-id");
+        if (!eid) return;
+        pendingEditInsuredId = eid;
+        var prevEm = editMailBtn.getAttribute("data-email");
+        if (editEmailInput) {
+          editEmailInput.value = prevEm != null ? prevEm : "";
+        }
+        if (editEmailDialog && typeof editEmailDialog.showModal === "function") {
+          editEmailDialog.showModal();
+          setTimeout(function () {
+            if (editEmailInput) {
+              editEmailInput.focus();
+              editEmailInput.select();
+            }
+          }, 0);
+        }
+        return;
+      }
+
       var delBtn = e.target && e.target.closest && e.target.closest(".dashboard-insured-delete");
       if (delBtn) {
         var did = delBtn.getAttribute("data-insured-id");
         if (!did) return;
-        if (
-          !confirm(
-            "Delete this insured from your list? This cannot be undone."
-          )
-        ) {
-          return;
+        pendingDeleteInsuredId = did;
+        if (deleteInsuredDialog && typeof deleteInsuredDialog.showModal === "function") {
+          deleteInsuredDialog.showModal();
+        } else if (!confirm("Delete this insured from your list? This cannot be undone.")) {
+          pendingDeleteInsuredId = null;
+        } else {
+          runDeleteInsured(did);
         }
-        delBtn.disabled = true;
-        fetch("/api/session", {
-          method: "POST",
-          cache: "no-store",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete_insured", insuredId: parseInt(did, 10) }),
-        })
-          .then(function (res) {
-            return res.text().then(function (text) {
-              var data = {};
-              if (text) {
-                try {
-                  data = JSON.parse(text);
-                } catch (ignore) {
-                  /* non-JSON */
-                }
-              }
-              return { ok: res.ok, data: data };
-            });
-          })
-          .then(function (result) {
-            if (result.ok && result.data && result.data.ok === true) {
-              refreshInsureds();
-              return;
-            }
-            var msg =
-              (result.data && result.data.error) || "Could not delete insured.";
-            if (insuredsErrorEl) {
-              insuredsErrorEl.textContent = msg;
-              insuredsErrorEl.classList.remove("hidden");
-            } else {
-              alert(msg);
-            }
-          })
-          .catch(function () {
-            if (insuredsErrorEl) {
-              insuredsErrorEl.textContent = "Network error.";
-              insuredsErrorEl.classList.remove("hidden");
-            } else {
-              alert("Network error.");
-            }
-          })
-          .finally(function () {
-            delBtn.disabled = false;
-          });
         return;
       }
 
@@ -596,39 +744,119 @@
     });
   }
 
-  if (teamInviteForm && teamInviteEmail) {
+  if (deleteInsuredCancelBtn && deleteInsuredDialog) {
+    deleteInsuredCancelBtn.addEventListener("click", function () {
+      pendingDeleteInsuredId = null;
+      deleteInsuredDialog.close();
+    });
+  }
+
+  if (deleteInsuredDialog) {
+    deleteInsuredDialog.addEventListener("cancel", function () {
+      pendingDeleteInsuredId = null;
+    });
+  }
+
+  if (deleteInsuredConfirmBtn) {
+    deleteInsuredConfirmBtn.addEventListener("click", function () {
+      var did = pendingDeleteInsuredId;
+      if (!did) return;
+      runDeleteInsured(did);
+    });
+  }
+
+  if (editEmailCancelBtn && editEmailDialog) {
+    editEmailCancelBtn.addEventListener("click", function () {
+      pendingEditInsuredId = null;
+      editEmailDialog.close();
+    });
+  }
+
+  if (editEmailDialog) {
+    editEmailDialog.addEventListener("cancel", function () {
+      pendingEditInsuredId = null;
+    });
+  }
+
+  if (editEmailSaveBtn) {
+    editEmailSaveBtn.addEventListener("click", function () {
+      runSaveInsuredEmail();
+    });
+  }
+
+  if (editEmailInput) {
+    editEmailInput.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        runSaveInsuredEmail();
+      }
+    });
+  }
+
+  if (teamInviteForm && teamInviteEmailsEl) {
     teamInviteForm.addEventListener("submit", function (e) {
       e.preventDefault();
-      var em = (teamInviteEmail.value || "").trim().toLowerCase();
-      if (!em) return;
-      var btn = teamInviteForm.querySelector('button[type="submit"]');
+      var parsed = parseInviteEmails(teamInviteEmailsEl.value);
+      var emails = parsed.valid;
+      var btn = teamInviteForm.querySelector(".dashboard-team-invite-submit");
+      if (!emails.length) {
+        if (parsed.invalid.length) {
+          showTeamMsg("No valid addresses. Skipped: " + parsed.invalid.join(", "), true);
+        } else {
+          showTeamMsg("Enter at least one valid email address.", true);
+        }
+        return;
+      }
       if (btn) btn.disabled = true;
-      fetch("/api/team", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "invite_sub", subEmail: em }),
-      })
-        .then(function (res) {
-          return res.json().then(function (d) {
-            return { ok: res.ok, data: d };
-          });
-        })
-        .then(function (result) {
-          if (result.ok && result.data && result.data.ok) {
-            showTeamMsg(result.data.message || "Invitation sent.", false);
-            teamInviteEmail.value = "";
-            loadTeam();
-            return;
+
+      function inviteAt(index, sent, failed) {
+        if (index >= emails.length) {
+          var parts = [];
+          if (parsed.invalid.length) {
+            parts.push("Skipped invalid: " + parsed.invalid.join(", "));
           }
-          showTeamMsg((result.data && result.data.error) || "Could not send invite.", true);
-        })
-        .catch(function () {
-          showTeamMsg("Network error.", true);
-        })
-        .finally(function () {
+          if (sent.length) parts.push("Invited: " + sent.join(", "));
+          if (failed.length) {
+            failed.forEach(function (f) {
+              parts.push(f.email + ": " + f.err);
+            });
+          }
+          showTeamMsg(parts.join(" — ") || "Done.", failed.length > 0);
+          teamInviteEmailsEl.value = "";
+          loadTeam();
           if (btn) btn.disabled = false;
-        });
+          return;
+        }
+        var em = emails[index];
+        fetch("/api/team", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "invite_sub", subEmail: em }),
+        })
+          .then(function (res) {
+            return res.json().then(function (d) {
+              return { ok: res.ok, data: d };
+            });
+          })
+          .then(function (result) {
+            if (result.ok && result.data && result.data.ok) {
+              sent.push(em);
+            } else {
+              failed.push({
+                email: em,
+                err: (result.data && result.data.error) || "Failed",
+              });
+            }
+            inviteAt(index + 1, sent, failed);
+          })
+          .catch(function () {
+            failed.push({ email: em, err: "Network error" });
+            inviteAt(index + 1, sent, failed);
+          });
+      }
+
+      inviteAt(0, [], []);
     });
   }
 
