@@ -269,14 +269,43 @@ async function computeShowQuarterAgeWarningForGeneratedReport(reportData, userId
 
 /**
  * PDFs uploaded via "Upload Notice of Assessment" (ifta_reports) used to build this summary.
- * When report_data.sourceReportIds is set, only those rows are listed (same order as saved IDs).
- * Legacy rows without IDs resolve quarters against the DB using file name + created_at <= report time
- * so deleting an upload does not swap in a newer file with the same name.
+ * When report_data includes sourceReportIds as an array, that list is authoritative (including []).
+ * Legacy rows without that property resolve from embedded quarters and/or a created_at time window.
  */
 async function buildSourceFilesForGeneratedReport(reportData, userId, options = {}) {
   const { reportCreatedAt } = options;
   const parsed = parseReportDataJson(reportData);
-  const ids = normalizeSourceReportIds(parsed.sourceReportIds);
+  const hasExplicitSourceIds =
+    Object.prototype.hasOwnProperty.call(parsed, 'sourceReportIds') && Array.isArray(parsed.sourceReportIds);
+
+  /**
+   * When report_data includes sourceReportIds as an array (including []), that list is authoritative.
+   * Otherwise empty [] was treated like "missing" and legacy filename / time-window fallbacks repopulated
+   * the UI with unrelated uploads after deletes.
+   */
+  if (hasExplicitSourceIds) {
+    const ids = normalizeSourceReportIds(parsed.sourceReportIds);
+    if (ids.length === 0) {
+      return [];
+    }
+    const src = await db.query(
+      `SELECT id, file_name, quarter_label, year, file_path
+       FROM ifta_reports
+       WHERE id = ANY($1::int[]) AND user_id = $2
+         AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')`,
+      [ids, userId]
+    );
+    const byId = new Map(src.rows.map((r) => [r.id, rowToSourceFileRow(r)]));
+    const ordered = [];
+    for (const raw of ids) {
+      const id = typeof raw === 'number' ? raw : parseInt(raw, 10);
+      if (Number.isNaN(id)) continue;
+      const row = byId.get(id);
+      if (row) ordered.push(row);
+    }
+    return ordered;
+  }
+
   let quarters = Array.isArray(parsed.quarters) ? parsed.quarters : [];
   if (quarters.length === 0 && Array.isArray(parsed.quarterSummaries)) {
     quarters = parsed.quarterSummaries;
@@ -297,27 +326,6 @@ async function buildSourceFilesForGeneratedReport(reportData, userId, options = 
     }
     out.push(f);
   };
-
-  // Authoritative: do not merge filename-based lookups — they use "latest by name" and pull unrelated
-  // uploads after the real rows are deleted.
-  if (ids.length > 0) {
-    const src = await db.query(
-      `SELECT id, file_name, quarter_label, year, file_path
-       FROM ifta_reports
-       WHERE id = ANY($1::int[]) AND user_id = $2
-         AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')`,
-      [ids, userId]
-    );
-    const byId = new Map(src.rows.map((r) => [r.id, rowToSourceFileRow(r)]));
-    const ordered = [];
-    for (const raw of ids) {
-      const id = typeof raw === 'number' ? raw : parseInt(raw, 10);
-      if (Number.isNaN(id)) continue;
-      const row = byId.get(id);
-      if (row) ordered.push(row);
-    }
-    return ordered;
-  }
 
   const createdBeforeReport = reportCreatedAt || null;
 
