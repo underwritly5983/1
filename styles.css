@@ -105,15 +105,6 @@
 
   --header-glass: color-mix(in oklch, var(--background) 88%, transparent);
   --header-glass-border: color-mix(in oklch, var(--border) 82%, var(--foreground));
-  /* Header: white left → soft cyan/blue right (aligned with site palette) */
-  --header-bg-fade: linear-gradient(
-    105deg,
-    #ffffff 0%,
-    #ffffff min(32%, 14rem),
-    color-mix(in oklch, var(--primary) 7%, white) 48%,
-    color-mix(in oklch, var(--brand-blue) 11%, white) 78%,
-    color-mix(in oklch, var(--primary) 13%, #f4faff) 100%
-  );
 
   --shadow-soft: 0 10px 30px color-mix(in oklch, var(--foreground) 8%, transparent);
   --shadow-sm: 0 1px 2px color-mix(in oklch, var(--foreground) 4%, transparent);
@@ -134,13 +125,6 @@
   --accent-tint: color-mix(in oklch, var(--primary) 18%, transparent);
   --green-soft: color-mix(in oklch, var(--brand-green) 18%, transparent);
   --accent-hover: oklch(0.88 0.06 200);
-  --header-bg-fade: linear-gradient(
-    105deg,
-    oklch(0.18 0.02 250) 0%,
-    oklch(0.18 0.02 250) min(32%, 14rem),
-    color-mix(in oklch, var(--primary) 12%, oklch(0.18 0.02 250)) 55%,
-    color-mix(in oklch, var(--chart-1) 18%, oklch(0.16 0.03 250)) 100%
-  );
 }
 
 *,
@@ -186,16 +170,18 @@ a:hover {
   max-width: 440px;
 }
 
-/* Header: white (left) → light blue/cyan (right); wordmark sits in the white zone */
+/* Header: flat white bar (no side gradient) */
 .site-header {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--header-bg-fade);
-  border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, white);
-  box-shadow:
-    0 1px 0 color-mix(in oklch, white 70%, var(--border)),
-    0 18px 42px color-mix(in oklch, var(--primary) 7%, transparent);
+  background: #ffffff;
+  border-bottom: 1px solid var(--header-glass-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.dark .site-header {
+  background: var(--card);
 }
 
 .header-inner {
@@ -227,10 +213,7 @@ a:hover {
   color: var(--brand-navy);
   white-space: nowrap;
   text-decoration: none;
-  /* Subtle depth without heavy effects */
-  text-shadow:
-    0 1px 0 color-mix(in oklch, white 55%, transparent),
-    0 2px 24px color-mix(in oklch, var(--primary) 12%, transparent);
+  text-shadow: 0 1px 0 color-mix(in oklch, white 60%, transparent);
 }
 
 .dark .brand-wordmark {
@@ -267,6 +250,16 @@ a:hover {
   min-height: 72px;
   object-fit: contain;
   object-position: left center;
+}
+
+/* White baked into PNG blends into light backgrounds (replace asset with transparent PNG when possible) */
+.site-header .brand-logo,
+.hero .hero-brand-logo {
+  mix-blend-mode: multiply;
+}
+
+.dark .site-header .brand-logo {
+  mix-blend-mode: normal;
 }
 
 /* Compact mark for nav (logo-small.png) — replaces wide wordmark asset */
@@ -406,18 +399,7 @@ a:hover {
 }
 
 .hero-glow {
-  position: absolute;
-  top: -30%;
-  right: -5%;
-  width: min(55vw, 480px);
-  aspect-ratio: 1;
-  background: radial-gradient(
-    circle at 30% 30%,
-    color-mix(in oklch, var(--primary) 14%, transparent) 0%,
-    color-mix(in oklch, var(--brand-teal) 10%, transparent) 42%,
-    transparent 68%
-  );
-  pointer-events: none;
+  display: none;
 }
 
 .eyebrow {
