@@ -110,6 +110,7 @@
         return fetch("/api/session", {
           method: "POST",
           cache: "no-store",
+          credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "upload",
