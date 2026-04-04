@@ -1,47 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/early-access.js": {
-      "maxDuration": 10
-    },
-    "api/profile-registration.js": {
-      "maxDuration": 10
-    },
-    "api/verify.js": {
-      "maxDuration": 10
-    },
-    "api/complete-registration.js": {
-      "maxDuration": 10
-    },
-    "api/session.js": {
-      "maxDuration": 60
-    },
-    "api/login.js": {
-      "maxDuration": 10
-    },
-    "api/logout.js": {
-      "maxDuration": 10
-    },
-    "api/admin-login.js": {
-      "maxDuration": 10
-    },
-    "api/admin-logout.js": {
-      "maxDuration": 10
-    },
-    "api/admin-session.js": {
-      "maxDuration": 10
-    },
-    "api/admin-submissions.js": {
-      "maxDuration": 10
-    },
-    "api/health.js": {
-      "maxDuration": 10
-    },
-    "api/team.js": {
-      "maxDuration": 30
-    },
-    "api/complete-sub-broker.js": {
-      "maxDuration": 15
+    "api/[[...path]].js": {
+      "maxDuration": 60,
+      "memory": 1024
     }
   },
   "headers": [

@@ -1,0 +1,6 @@
+.data
+node_modules
+_design_zip
+*.zip
+.git
+integrations
