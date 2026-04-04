@@ -76,6 +76,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       reportIds: result.reportIds,
       brokerEmail: result.brokerEmail,
+      generatedReportId: result.generatedReportId != null ? result.generatedReportId : undefined,
       errors: result.errors && result.errors.length ? result.errors : undefined,
     });
   } catch (e) {
