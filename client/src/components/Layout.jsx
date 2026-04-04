@@ -1,16 +1,18 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { FileText, Upload, LogOut, User, BarChart3, LayoutDashboard } from 'lucide-react'
+import { FileText, Upload, LogOut, User, BarChart3, LayoutDashboard, Home } from 'lucide-react'
 import { AppLogo } from './AppLogo'
+import { getTrustedUnderwritlyDashboardUrl } from '../lib/trustedUnderwritlyDashboardUrl'
 
 const Layout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const underwritlyDashboardUrl = getTrustedUnderwritlyDashboardUrl()
 
   /** Logged-in broker / user — never the insured name from the report. */
   const topRightName = user?.companyName || user?.email || 'User'
 
-  const isDashboard = location.pathname === '/reports'
+  const isIftaSummaryHome = location.pathname === '/reports'
   const isUpload = location.pathname.startsWith('/reports/upload')
   const isViewReport =
     location.pathname === '/reports/generated' ||
@@ -28,14 +30,31 @@ const Layout = () => {
         <div className="max-w-[min(100%,1600px)] mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-14">
           <div className="flex justify-between items-center h-14">
             <div className="flex items-center gap-6">
-              <Link to="/reports" className="flex items-center gap-2 shrink-0" title="IFTA summary">
+              <Link
+                to="/reports"
+                className="flex items-center gap-2 shrink-0"
+                title="IFTA summary in this app"
+              >
                 <AppLogo variant="nav" />
                 <span className="sr-only">IFTA Pro</span>
               </Link>
               <div className="flex items-center gap-2 flex-wrap">
-                <Link to="/reports" className={navClass(isDashboard)} title="IFTA summary and source PDFs">
+                <a
+                  href={underwritlyDashboardUrl}
+                  className={navClass(false)}
+                  rel="noopener noreferrer"
+                  title="Back to your insured list on Underwritly"
+                >
                   <LayoutDashboard className="h-4 w-4 mr-2" />
                   Dashboard
+                </a>
+                <Link
+                  to="/reports"
+                  className={navClass(isIftaSummaryHome)}
+                  title="IFTA summary and source PDFs"
+                >
+                  <Home className="h-4 w-4 mr-2" />
+                  IFTA summary
                 </Link>
                 <Link to="/reports/upload" className={navClass(isUpload)}>
                   <Upload className="h-4 w-4 mr-2" />
