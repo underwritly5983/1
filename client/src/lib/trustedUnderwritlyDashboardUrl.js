@@ -23,7 +23,6 @@ export function getTrustedUnderwritlyDashboardUrl() {
   const raw = import.meta.env.VITE_UNDERWRITLY_DASHBOARD_URL || DEFAULT_DASHBOARD
   try {
     const u = new URL(raw)
-    const dev = import.meta.env.DEV
 
     const finalize = (url) => {
       const path = (url.pathname || '/').replace(/\/+$/, '') || '/'
@@ -37,7 +36,7 @@ export function getTrustedUnderwritlyDashboardUrl() {
       return finalize(u)
     }
 
-    if (dev && u.protocol === 'http:' && isLocalDevHost(u.hostname)) {
+    if (import.meta.env.DEV && u.protocol === 'http:' && isLocalDevHost(u.hostname)) {
       return finalize(u)
     }
 
