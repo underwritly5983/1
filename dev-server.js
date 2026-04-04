@@ -23,6 +23,8 @@ var adminLogoutHandler = require("./api/admin-logout");
 var adminSessionHandler = require("./api/admin-session");
 var adminSubmissionsHandler = require("./api/admin-submissions");
 var healthHandler = require("./api/health");
+var teamHandler = require("./api/team");
+var completeSubBrokerHandler = require("./api/complete-sub-broker");
 
 var app = express();
 var PORT = parseInt(process.env.PORT || "3456", 10);
@@ -114,6 +116,14 @@ app.all(["/api/health", "/api/health/"], function (req, res) {
   return healthHandler(req, res);
 });
 
+app.all(["/api/team", "/api/team/"], function (req, res) {
+  return teamHandler(req, res);
+});
+
+app.all(["/api/complete-sub-broker", "/api/complete-sub-broker/"], function (req, res) {
+  return completeSubBrokerHandler(req, res);
+});
+
 app.use(
   express.static(path.join(__dirname), {
     index: ["index.html"],
@@ -138,7 +148,7 @@ var server = app.listen(PORT, function () {
   console.log("============================================================");
   console.log("  Underwritly local server  http://localhost:" + PORT);
   console.log(
-    "  APIs: early-access, verify, profile-registration, complete-registration, session, login, logout, admin-*, health"
+    "  APIs: early-access, verify, profile-registration, complete-registration, complete-sub-broker, team, session, login, logout, admin-*, health"
   );
   console.log("  Readiness: GET /api/health");
   console.log("  Back office: http://localhost:" + PORT + "/admin.html");

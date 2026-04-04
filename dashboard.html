@@ -90,6 +90,42 @@
                   <dd id="dashboard-phone">—</dd>
                 </div>
               </dl>
+
+              <div id="dashboard-team-section" class="dashboard-team-section hidden" aria-labelledby="dashboard-team-heading">
+                <h3 id="dashboard-team-heading" class="dashboard-subtitle">Organization &amp; team</h3>
+                <p class="dashboard-meta dashboard-team-lead">
+                  Invite brokers on your team. They share your insured list and IFTA access; only you can remove insured contacts
+                  or delete team members.
+                </p>
+                <div id="dashboard-team-stats" class="dashboard-org-stats" aria-label="Organization activity"></div>
+                <div class="dashboard-team-invite-row">
+                  <form id="dashboard-team-invite-form" class="dashboard-team-invite-form">
+                    <label class="sr-only" for="dashboard-team-invite-email">Team member email</label>
+                    <input
+                      type="email"
+                      id="dashboard-team-invite-email"
+                      name="email"
+                      required
+                      autocomplete="email"
+                      placeholder="colleague@company.com"
+                      class="dashboard-team-invite-input"
+                    />
+                    <button type="submit" class="btn btn-primary btn-sm">Invite team member</button>
+                  </form>
+                  <p id="dashboard-team-invite-msg" class="dashboard-meta dashboard-team-msg hidden" role="status"></p>
+                </div>
+                <div class="dashboard-team-columns">
+                  <div>
+                    <h4 class="dashboard-team-col-title">Team members</h4>
+                    <ul id="dashboard-team-list" class="dashboard-team-list"></ul>
+                  </div>
+                  <div>
+                    <h4 class="dashboard-team-col-title">Pending invitations</h4>
+                    <ul id="dashboard-team-invites" class="dashboard-team-list dashboard-team-list--muted"></ul>
+                  </div>
+                </div>
+              </div>
+
               <div class="dashboard-insureds" id="dashboard-insureds-block">
                 <h3 class="dashboard-subtitle">Insured clients</h3>
                 <p class="dashboard-meta dashboard-insureds-lead">
@@ -109,6 +145,7 @@
                         <th scope="col">Name</th>
                         <th scope="col">Email</th>
                         <th scope="col">Status</th>
+                        <th scope="col">Added by</th>
                         <th scope="col">Files</th>
                         <th scope="col">IFTA Summary</th>
                         <th scope="col">Actions</th>

@@ -36,6 +36,12 @@
     },
     "api/health.js": {
       "maxDuration": 10
+    },
+    "api/team.js": {
+      "maxDuration": 30
+    },
+    "api/complete-sub-broker.js": {
+      "maxDuration": 15
     }
   },
   "headers": [

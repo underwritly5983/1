@@ -16,6 +16,7 @@ var profileAccess = require("../lib/profile-access-token");
 var handleIftaInsuredUploadsPull = require("../lib/ifta-insured-uploads-pull");
 var relayIftaIngest = require("../lib/ifta-ingest-webhook");
 var iftaUrls = require("../lib/ifta-urls");
+var orgBroker = require("../lib/org-broker");
 
 function sendJson(res, status, obj) {
   if (!res || typeof res.status !== "function") return;
@@ -66,6 +67,9 @@ function publicUser(record) {
     accountType: record.accountType === "sub" ? "sub" : "primary",
     primaryEmail: pe,
     permissions: userStore.sanitizePermissions(record.permissions),
+    canManageTeam: orgBroker.canManageTeam(record),
+    isSubAccount: orgBroker.isSubAccount(record),
+    canDeleteInsured: orgBroker.canDeleteInsured(record),
   };
 }
 
@@ -191,6 +195,7 @@ module.exports = async function handler(req, res) {
       var ck = companyKeyLib.resolveCompanyKey(record);
       var at = record.accountType === "sub" ? "sub" : "primary";
       var pe = typeof record.primaryEmail === "string" ? normEmail(record.primaryEmail) : "";
+      var orgBe = orgBroker.orgBrokerEmail(record);
       var launchPayload = {
         typ: "ifta_launch",
         v: 1,
@@ -207,7 +212,7 @@ module.exports = async function handler(req, res) {
         var idNum = parseInt(String(insuredIdParam), 10);
         if (!isNaN(idNum) && idNum > 0) {
           try {
-            var insRow = await insuredDb.getByBrokerAndId(v.email, idNum);
+            var insRow = await insuredDb.getByBrokerAndId(orgBe, idNum);
             if (insRow) {
               launchPayload.insuredId = idNum;
               launchPayload.insuredName = insRow.name || "";
@@ -242,10 +247,7 @@ module.exports = async function handler(req, res) {
       payload.iftaLaunchUrl = launchUrl;
       if (launchPayload.insuredId != null && typeof launchPayload.insuredId === "number") {
         try {
-          await relayIftaIngest.relayInsuredUploadsToIftaWebhook(
-            normEmail(record.email),
-            launchPayload.insuredId
-          );
+          await relayIftaIngest.relayInsuredUploadsToIftaWebhook(orgBe, launchPayload.insuredId);
         } catch (relErr) {
           console.error("[session] IFTA ingest relay failed", relErr && relErr.message);
         }
@@ -255,7 +257,8 @@ module.exports = async function handler(req, res) {
     if (String(q.include || "").toLowerCase() === "insureds") {
       if (insuredDb.hasPostgres()) {
         try {
-          var list = await insuredDb.listByBroker(v.email);
+          var orgBrokerEmail = orgBroker.orgBrokerEmail(record);
+          var list = await insuredDb.listByBroker(orgBrokerEmail);
           payload.insureds = list.map(function (r) {
             return {
               id: r.id,
@@ -268,6 +271,7 @@ module.exports = async function handler(req, res) {
               verifiedAt: r.verifiedAt,
               completedAt: r.completedAt,
               uploadCount: typeof r.uploadCount === "number" ? r.uploadCount : 0,
+              createdByEmail: r.createdByEmail || "",
             };
           });
         } catch (ie) {

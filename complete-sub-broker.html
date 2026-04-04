@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Join your team on Underwritly — verify your email and create your profile." />
+    <title>Join your team — Underwritly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-register page-complete-sub-broker">
+    <div id="api-env-warning" class="dev-api-warning hidden" role="status" aria-live="polite">
+      <strong>Local setup:</strong> Use <code>npm start</code> from this folder so API routes work.
+    </div>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/">
+          <img
+            src="assets/logo-small.png"
+            alt="Underwritly"
+            width="200"
+            height="200"
+            class="brand-logo brand-logo--mark"
+            decoding="async"
+          />
+        </a>
+        <nav class="nav" aria-label="Primary">
+          <a href="/">Home</a>
+          <a href="/login.html">Sign in</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="profile-registration profile-registration--lead">
+        <div class="container narrow">
+          <header class="section-head section-head--center">
+            <h2 class="section-title">Join your organization</h2>
+            <p class="section-sub" id="sub-broker-lead">
+              Enter the code from your invitation email, then choose a password and your profile details.
+            </p>
+          </header>
+
+          <form class="access-form" id="sub-broker-form" novalidate>
+            <div class="form-row">
+              <label for="sub-broker-email">Work email</label>
+              <input type="email" id="sub-broker-email" name="email" required autocomplete="email" />
+            </div>
+
+            <div class="form-row">
+              <label for="sub-broker-code">Verification code</label>
+              <input
+                type="text"
+                id="sub-broker-code"
+                name="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                required
+                placeholder="6-digit code"
+              />
+              <p class="field-hint">From the email your organization admin sent you.</p>
+            </div>
+
+            <div class="form-row">
+              <label for="sub-broker-password">Password</label>
+              <input
+                type="password"
+                id="sub-broker-password"
+                name="password"
+                autocomplete="new-password"
+                required
+                minlength="10"
+                placeholder="At least 10 characters, with a letter and a number"
+              />
+              <p class="field-error" id="sub-broker-password-error" role="alert"></p>
+            </div>
+
+            <div class="form-row">
+              <label for="sub-broker-name">Full name</label>
+              <input type="text" id="sub-broker-name" name="name" required maxlength="200" autocomplete="name" />
+            </div>
+
+            <div class="form-row">
+              <label for="sub-broker-phone">Phone</label>
+              <input type="tel" id="sub-broker-phone" name="phone" required autocomplete="tel" />
+            </div>
+
+            <div class="form-row">
+              <label for="sub-broker-role">Job title / role</label>
+              <input type="text" id="sub-broker-role" name="role" required maxlength="120" autocomplete="organization-title" />
+            </div>
+
+            <p class="field-error form-submit-error hidden" id="sub-broker-form-error" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="sub-broker-submit">Create account &amp; sign in</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div class="footer-bottom">
+          <p class="footer-copy">© <span id="year"></span> Underwritly. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="complete-sub-broker-page.js"></script>
+  </body>
+</html>

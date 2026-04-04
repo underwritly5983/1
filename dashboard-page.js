@@ -20,6 +20,13 @@
   var iftaAllowedEl = document.getElementById("dashboard-ifta-allowed");
   var iftaOpenBtn = document.getElementById("dashboard-ifta-open");
   var iftaLaunchErrEl = document.getElementById("dashboard-ifta-launch-err");
+  var teamSectionEl = document.getElementById("dashboard-team-section");
+  var teamStatsEl = document.getElementById("dashboard-team-stats");
+  var teamListEl = document.getElementById("dashboard-team-list");
+  var teamInvitesEl = document.getElementById("dashboard-team-invites");
+  var teamInviteForm = document.getElementById("dashboard-team-invite-form");
+  var teamInviteEmail = document.getElementById("dashboard-team-invite-email");
+  var teamInviteMsg = document.getElementById("dashboard-team-invite-msg");
 
   var currentUser = null;
 
@@ -42,6 +49,10 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+  }
+
+  function escAttr(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   }
 
   function canOpenIfta(user) {
@@ -96,12 +107,21 @@
         ' title="' +
         esc(resendTitle) +
         '">Resend email</button>';
-      var deleteBtn =
-        '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-delete" data-insured-id="' +
-        esc(String(id)) +
-        '" title="Remove this insured from your list">Delete</button>';
+      var canDel = !user || user.canDeleteInsured !== false;
+      var deleteBtn = canDel
+        ? '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-delete" data-insured-id="' +
+          esc(String(id)) +
+          '" title="Remove this insured from your list">Delete</button>'
+        : "";
       var actionsCell =
-        '<div class="dashboard-insured-actions">' + resendBtn + deleteBtn + "</div>";
+        '<div class="dashboard-insured-actions">' +
+        resendBtn +
+        (deleteBtn ? deleteBtn : "") +
+        "</div>";
+      var addedBy =
+        r.createdByEmail && String(r.createdByEmail).trim()
+          ? esc(r.createdByEmail)
+          : "—";
       var fileCount =
         typeof r.uploadCount === "number" && r.uploadCount > 0
           ? String(r.uploadCount)
@@ -113,6 +133,8 @@
         esc(r.email) +
         "</td><td>" +
         esc(r.statusLabel || r.status) +
+        "</td><td>" +
+        addedBy +
         "</td><td>" +
         esc(fileCount) +
         "</td><td>" +
@@ -169,7 +191,20 @@
     if (insuredsLoadingEl) insuredsLoadingEl.classList.add("hidden");
 
     var displayName = (user && user.name && String(user.name).trim()) || "there";
-    if (nameEl) nameEl.textContent = "Hi, " + displayName.split(/\s+/)[0];
+    if (nameEl) {
+      nameEl.textContent = "";
+      nameEl.appendChild(
+        document.createTextNode("Hi, " + (displayName.split(/\s+/)[0] || "there"))
+      );
+      if (user && user.isSubAccount) {
+        nameEl.appendChild(document.createTextNode(" "));
+        var subBadge = document.createElement("span");
+        subBadge.className = "dashboard-sub-badge";
+        subBadge.setAttribute("title", "Team member account");
+        subBadge.textContent = "Team";
+        nameEl.appendChild(subBadge);
+      }
+    }
     if (emailEl) emailEl.textContent = (user && user.email) || "";
     if (companyEl) companyEl.textContent = (user && user.company) || "—";
     if (roleEl) roleEl.textContent = (user && user.role) || "—";
@@ -197,7 +232,121 @@
       if (iftaLockedEl) iftaLockedEl.classList.remove("hidden");
     }
 
+    if (teamSectionEl) {
+      if (user && user.canManageTeam) {
+        teamSectionEl.classList.remove("hidden");
+        loadTeam();
+      } else {
+        teamSectionEl.classList.add("hidden");
+      }
+    }
+
     renderInsuredRows(user, insureds);
+  }
+
+  function renderTeamData(data) {
+    if (!teamStatsEl || !teamListEl || !teamInvitesEl) return;
+    var stats = (data && data.stats) || {};
+    var insuredCount = typeof stats.insuredCount === "number" ? stats.insuredCount : 0;
+    var totalFiles = typeof stats.totalReportFiles === "number" ? stats.totalReportFiles : 0;
+    var html =
+      '<div class="dashboard-stat-card"><span class="dashboard-stat-value">' +
+      insuredCount +
+      '</span><span class="dashboard-stat-label">Insured contacts</span></div>' +
+      '<div class="dashboard-stat-card"><span class="dashboard-stat-value">' +
+      totalFiles +
+      '</span><span class="dashboard-stat-label">Report files received (IFTA uploads)</span></div>';
+    var byCreator = Array.isArray(stats.byCreator) ? stats.byCreator : [];
+    if (byCreator.length) {
+      html +=
+        '<div class="dashboard-stat-card dashboard-stat-card--wide"><span class="dashboard-stat-label">Insured contacts added by</span><ul class="dashboard-stat-by">';
+      byCreator.forEach(function (b) {
+        html +=
+          "<li>" +
+          esc(b.label || b.email || "—") +
+          ": <strong>" +
+          (b.insuredsCreated || 0) +
+          "</strong></li>";
+      });
+      html += "</ul></div>";
+    }
+    teamStatsEl.innerHTML = html;
+
+    var subs = Array.isArray(data.subUsers) ? data.subUsers : [];
+    teamListEl.innerHTML = "";
+    if (!subs.length) {
+      teamListEl.innerHTML =
+        '<li class="dashboard-team-empty">No team members yet. Invite someone by email above.</li>';
+    } else {
+      subs.forEach(function (s) {
+        var em = s.email || "";
+        var nm = esc(s.name || "");
+        var emAttr = escAttr(em);
+        teamListEl.insertAdjacentHTML(
+          "beforeend",
+          '<li class="dashboard-team-item"><div><strong>' +
+            nm +
+            '</strong><br /><span class="dashboard-team-email">' +
+            esc(em) +
+            '</span></div><div class="dashboard-team-item-actions">' +
+            '<button type="button" class="btn btn-ghost btn-sm dashboard-team-reset-pw" data-team-email="' +
+            emAttr +
+            '">Reset password</button> ' +
+            '<button type="button" class="btn btn-ghost btn-sm dashboard-team-remove" data-team-email="' +
+            emAttr +
+            '">Remove</button></div></li>'
+        );
+      });
+    }
+
+    var invites = Array.isArray(data.pendingInvites) ? data.pendingInvites : [];
+    teamInvitesEl.innerHTML = "";
+    if (!invites.length) {
+      teamInvitesEl.innerHTML = '<li class="dashboard-team-empty">None pending</li>';
+    } else {
+      invites.forEach(function (inv) {
+        var em = inv.subEmail || "";
+        var emAttr = escAttr(em);
+        teamInvitesEl.insertAdjacentHTML(
+          "beforeend",
+          '<li class="dashboard-team-item"><span class="dashboard-team-email">' +
+            esc(em) +
+            '</span> <button type="button" class="btn btn-ghost btn-sm dashboard-team-resend-invite" data-team-email="' +
+            emAttr +
+            '">Resend code</button></li>'
+        );
+      });
+    }
+  }
+
+  function loadTeam() {
+    if (!teamSectionEl || !currentUser || !currentUser.canManageTeam) return;
+    fetch("/api/team", { credentials: "same-origin", cache: "no-store" })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { ok: r.ok, data: d };
+        });
+      })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.ok) {
+          renderTeamData(result.data);
+        }
+      })
+      .catch(function () {
+        /* ignore */
+      });
+  }
+
+  function showTeamMsg(text, isError) {
+    if (!teamInviteMsg) return;
+    teamInviteMsg.textContent = text || "";
+    teamInviteMsg.classList.remove("hidden");
+    teamInviteMsg.style.color = isError ? "#b91c1c" : "#15803d";
+    if (text) {
+      setTimeout(function () {
+        teamInviteMsg.classList.add("hidden");
+      }, 8000);
+    }
   }
 
   fetch("/api/session?include=insureds", { method: "GET", cache: "no-store", credentials: "same-origin" })
@@ -443,6 +592,88 @@
         })
         .finally(function () {
           btn.disabled = false;
+        });
+    });
+  }
+
+  if (teamInviteForm && teamInviteEmail) {
+    teamInviteForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var em = (teamInviteEmail.value || "").trim().toLowerCase();
+      if (!em) return;
+      var btn = teamInviteForm.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      fetch("/api/team", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite_sub", subEmail: em }),
+      })
+        .then(function (res) {
+          return res.json().then(function (d) {
+            return { ok: res.ok, data: d };
+          });
+        })
+        .then(function (result) {
+          if (result.ok && result.data && result.data.ok) {
+            showTeamMsg(result.data.message || "Invitation sent.", false);
+            teamInviteEmail.value = "";
+            loadTeam();
+            return;
+          }
+          showTeamMsg((result.data && result.data.error) || "Could not send invite.", true);
+        })
+        .catch(function () {
+          showTeamMsg("Network error.", true);
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  }
+
+  if (teamSectionEl) {
+    teamSectionEl.addEventListener("click", function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var resend = t.closest(".dashboard-team-resend-invite");
+      var remove = t.closest(".dashboard-team-remove");
+      var resetPw = t.closest(".dashboard-team-reset-pw");
+      var subEm = null;
+      if (resend) subEm = resend.getAttribute("data-team-email");
+      else if (remove) subEm = remove.getAttribute("data-team-email");
+      else if (resetPw) subEm = resetPw.getAttribute("data-team-email");
+      if (!subEm) return;
+      if (remove) {
+        if (!confirm("Remove this team member? They will lose access immediately.")) return;
+      }
+      var action = resend ? "resend_invite" : remove ? "remove_sub" : "send_password_reset";
+      var rowBtn = resend || remove || resetPw;
+      if (rowBtn) rowBtn.disabled = true;
+      fetch("/api/team", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action, subEmail: subEm }),
+      })
+        .then(function (res) {
+          return res.json().then(function (d) {
+            return { ok: res.ok, data: d };
+          });
+        })
+        .then(function (result) {
+          if (result.ok && result.data && result.data.ok) {
+            showTeamMsg(result.data.message || "Done.", false);
+            loadTeam();
+            return;
+          }
+          showTeamMsg((result.data && result.data.error) || "Request failed.", true);
+        })
+        .catch(function () {
+          showTeamMsg("Network error.", true);
+        })
+        .finally(function () {
+          if (rowBtn) rowBtn.disabled = false;
         });
     });
   }
