@@ -518,14 +518,6 @@ a:hover {
   color: rgba(94, 234, 212, 0.95);
 }
 
-.section-title--dark {
-  color: #ffffff;
-}
-
-.section-sub--dark {
-  color: rgba(255, 255, 255, 0.72);
-}
-
 .section-head--center {
   margin-left: auto;
   margin-right: auto;
@@ -553,6 +545,15 @@ a:hover {
   color: var(--text-muted);
   font-size: 1rem;
   line-height: 1.65;
+}
+
+/* Must follow .section-title / .section-sub so dark-band sections win the cascade */
+.section-title.section-title--dark {
+  color: #ffffff;
+}
+
+.section-sub.section-sub--dark {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .feature-grid {
@@ -723,28 +724,47 @@ a:hover {
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.25);
   margin-bottom: 1rem;
 }
 
+/* Brand-aligned cyan / navy family (not rainbow primaries) */
 .how-step-icon--blue {
-  background: linear-gradient(180deg, rgba(29, 78, 216, 0.95), rgba(29, 78, 216, 0.78));
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--primary) 88%, white) 0%,
+    color-mix(in oklch, var(--primary) 52%, var(--brand-navy)) 100%
+  );
+  border: 1px solid color-mix(in oklch, white 28%, transparent);
+  box-shadow: 0 12px 32px color-mix(in oklch, var(--brand-navy) 45%, transparent);
 }
 
 .how-step-icon--teal {
-  background: linear-gradient(180deg, rgba(13, 148, 136, 0.95), rgba(13, 148, 136, 0.78));
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--brand-blue) 55%, var(--primary)) 0%,
+    color-mix(in oklch, var(--brand-navy) 38%, var(--primary)) 100%
+  );
+  border: 1px solid color-mix(in oklch, white 22%, transparent);
+  box-shadow: 0 12px 32px color-mix(in oklch, var(--brand-navy) 45%, transparent);
 }
 
 .how-step-icon--green {
-  background: linear-gradient(180deg, rgba(22, 163, 74, 0.95), rgba(22, 163, 74, 0.78));
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklch, var(--primary) 42%, var(--brand-teal)) 0%,
+    color-mix(in oklch, var(--brand-navy) 48%, var(--primary)) 100%
+  );
+  border: 1px solid color-mix(in oklch, white 22%, transparent);
+  box-shadow: 0 12px 32px color-mix(in oklch, var(--brand-navy) 45%, transparent);
 }
 
 .how-step-number {
   margin: 0 0 0.5rem;
   font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: rgba(245, 158, 11, 0.92);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--primary) 38%, white);
 }
 
 .how-step-title {
