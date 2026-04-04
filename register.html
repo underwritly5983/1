@@ -5,16 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Complete your Underwritly broker profile — private registration from your early access confirmation."
+      content="Complete your Underwritly broker profile using the private link from your early access confirmation."
     />
-    <title>Register your profile — Underwritly</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Complete your profile — Underwritly</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=9" />
+    <link rel="stylesheet" href="styles.css?v=10" />
     <link rel="icon" href="assets/logo-small.png" type="image/png" />
   </head>
   <body class="page-register">
@@ -43,6 +44,26 @@
     </header>
 
     <main id="top">
+      <section id="register-invite-only" class="register-fallback">
+        <div class="container narrow">
+          <header class="section-head section-head--center">
+            <h2 class="section-title">Broker access is by approval</h2>
+            <p class="section-sub">
+              There is no open sign-up. Request early access first—after our team approves your
+              request, you will get a private email link to complete your profile here.
+            </p>
+            <div class="register-fallback-actions">
+              <a class="btn btn-primary" href="/#early-access">Request early access</a>
+              <a class="btn btn-ghost" href="/login.html">Sign in</a>
+            </div>
+            <p class="section-sub register-fallback-hint">
+              Already approved? Open the profile link from your confirmation email (this page stays
+              blank until that link is used).
+            </p>
+          </header>
+        </div>
+      </section>
+
       <section
         id="profile-registration"
         class="profile-registration profile-registration--lead profile-gate profile-gate--locked"
@@ -50,10 +71,10 @@
       >
         <div class="container narrow">
           <header class="section-head section-head--center">
-            <h2 class="section-title">Register your profile</h2>
+            <h2 class="section-title">Complete your broker profile</h2>
             <p class="section-sub">
-              Complete your broker profile using the work email from your early access request. You
-              will receive a confirmation email after you submit.
+              Use the private link from your early access confirmation. Your work email is locked to
+              that invitation. You will receive a confirmation email after you submit.
             </p>
           </header>
 
@@ -133,7 +154,7 @@
 
             <p class="field-error form-submit-error hidden" id="profile-form-error" role="alert"></p>
             <button type="submit" class="btn btn-primary btn-block" id="profile-submit-btn">
-              Register profile
+              Complete profile
             </button>
           </form>
 
@@ -143,7 +164,7 @@
             role="status"
             aria-live="polite"
           >
-            <p class="success-title">Profile registered</p>
+            <p class="success-title">Profile submitted</p>
             <p class="success-body">
               Check your work email for a message that congratulates you on the setup and includes a
               private link. Use that link to choose your password (required), optionally upload your

@@ -111,6 +111,8 @@
       sessionStorage.setItem(PROFILE_ACCESS_STORAGE, token);
     } catch (ignore) {}
     document.body.classList.add("page-profile-flow");
+    var inviteOnly = document.getElementById("register-invite-only");
+    if (inviteOnly) inviteOnly.classList.add("hidden");
     if (profileSection) {
       profileSection.classList.remove("profile-gate--locked");
       profileSection.setAttribute("aria-hidden", "false");
@@ -378,7 +380,7 @@
 
       if (profileSubmitBtn) {
         profileSubmitBtn.disabled = true;
-        profileSubmitBtn.textContent = "Registering…";
+        profileSubmitBtn.textContent = "Submitting…";
       }
 
       fetch("/api/profile-registration", {
@@ -427,7 +429,7 @@
         .finally(function () {
           if (profileSubmitBtn) {
             profileSubmitBtn.disabled = false;
-            profileSubmitBtn.textContent = "Register profile";
+            profileSubmitBtn.textContent = "Complete profile";
           }
         });
     });
