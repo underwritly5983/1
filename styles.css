@@ -533,6 +533,11 @@ a:hover {
   max-width: 26rem;
 }
 
+/* Core modules: centered intro, wider measure for the paragraph */
+.section-head--features.section-head--center {
+  max-width: min(44rem, 100%);
+}
+
 .section-title {
   font-family: var(--font-heading);
   font-size: clamp(1.375rem, 2.5vw, 1.75rem);
