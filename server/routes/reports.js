@@ -1373,6 +1373,37 @@ router.get('/generated/list', authenticate, async (req, res) => {
   }
 });
 
+/** Rebuild the named IFTA summary from Notice of Assessment rows (e.g. if insured ingest did not finish in time). */
+router.post('/generated/rebuild-from-notice-uploads', authenticate, async (req, res) => {
+  try {
+    const { generateAndSaveGeneratedReport } = require('../services/underwritlyIngest');
+    const check = await db.query(
+      `SELECT id FROM ifta_reports
+       WHERE user_id = $1 AND (document_kind IS NULL OR document_kind = 'notice_of_assessment')
+       LIMIT 1`,
+      [req.user.id]
+    );
+    if (check.rows.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          'No Notice of Assessment PDFs found for your account yet. Upload PDFs or wait for files from an insured.',
+      });
+    }
+    const genId = await generateAndSaveGeneratedReport(req.user.id);
+    if (!genId) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Could not build the summary. Try again in a moment.',
+      });
+    }
+    return res.json({ ok: true, generatedReportId: genId });
+  } catch (error) {
+    console.error('rebuild-from-notice-uploads error:', error);
+    res.status(500).json({ ok: false, error: error.message || 'Failed to rebuild summary' });
+  }
+});
+
 // Add Notice of Assessment PDFs to an existing generated summary (at most 4 source PDFs per summary).
 router.post(
   '/generated/:id/add-source-pdfs',

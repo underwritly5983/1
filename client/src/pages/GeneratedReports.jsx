@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { Upload } from 'lucide-react'
+import { Upload, RefreshCw } from 'lucide-react'
 import JurisdictionReportLoader from '../components/JurisdictionReportLoader'
 import SourceUploadFileRow from '../components/SourceUploadFileRow'
 import { AppLogo } from '../components/AppLogo'
@@ -13,6 +13,7 @@ const GeneratedReports = () => {
   const [selectedPdfIds, setSelectedPdfIds] = useState(new Set())
   const [detailRefreshKey, setDetailRefreshKey] = useState(0)
   const [uploadingAdditional, setUploadingAdditional] = useState(false)
+  const [rebuilding, setRebuilding] = useState(false)
   const additionalPdfInputRef = useRef(null)
   const selectedReport = useMemo(
     () => reports.find((r) => r.id === selectedReportId) || null,
@@ -46,6 +47,22 @@ const GeneratedReports = () => {
       toast.error('Failed to fetch reports')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRebuildFromUploads = async () => {
+    setRebuilding(true)
+    try {
+      const res = await axios.post('/reports/generated/rebuild-from-notice-uploads')
+      const id = res.data?.generatedReportId
+      toast.success('Summary built from your Notice of Assessment uploads.')
+      await fetchReports()
+      if (id != null) setSelectedReportId(id)
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message || 'Could not build summary'
+      toast.error(msg)
+    } finally {
+      setRebuilding(false)
     }
   }
 
@@ -264,7 +281,20 @@ const GeneratedReports = () => {
         <div className="card text-center py-12 text-gray-600">
           <AppLogo variant="hero" className="mx-auto mb-3" />
           <p className="font-medium text-gray-900">No generated reports yet</p>
-          <p className="text-sm mt-1">Upload your Notice of Assessment PDFs to build a summary.</p>
+          <p className="text-sm mt-1 max-w-md mx-auto">
+            If you already uploaded Notice of Assessment PDFs (or received them from an insured), build the combined summary
+            here. Otherwise upload PDFs from <strong className="font-medium text-gray-800">Upload Notice of Assessment</strong>{' '}
+            first.
+          </p>
+          <button
+            type="button"
+            disabled={rebuilding}
+            onClick={handleRebuildFromUploads}
+            className="mt-5 inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 shrink-0 ${rebuilding ? 'animate-spin' : ''}`} />
+            {rebuilding ? 'Building summary…' : 'Build summary from my uploads'}
+          </button>
         </div>
       )}
     </div>

@@ -30,11 +30,13 @@ function sortRowsChronologically(rows) {
 /**
  * Build generated_reports for the IFTA UI (same table as upload-multiple).
  * Uses all Notice of Assessment rows for the broker, keeps the latest four periods (product max).
+ *
+ * Persists JSON first so the summary list works even if PDF generation fails (common on tight serverless budgets).
  */
-async function generateAndSaveGeneratedReport(userId, ingestBatchReportIds) {
-  if (!ingestBatchReportIds || ingestBatchReportIds.length === 0) return null;
+async function generateAndSaveGeneratedReport(userId) {
+  if (!userId) return null;
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   const userResult = await db.query(
     'SELECT company_name, logo_url, brand_color_primary, brand_color_secondary FROM users WHERE id = $1',
@@ -64,12 +66,12 @@ async function generateAndSaveGeneratedReport(userId, ingestBatchReportIds) {
   );
 
   let attempts = 0;
-  const maxAttempts = 10;
+  const maxAttempts = 6;
   while (attempts < maxAttempts) {
-    const hasRawText = reportsResult.rows.some((r) => r.raw_text && r.raw_text.length > 100);
+    const hasRawText = reportsResult.rows.some((r) => r.raw_text && String(r.raw_text).length > 80);
     const allCompleted = reportsResult.rows.every((r) => r.status === 'completed' && r.summary);
     if (hasRawText || allCompleted || attempts >= maxAttempts - 1) break;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     attempts += 1;
     reportsResult = await db.query(
       `SELECT id, file_name, quarter_label, year, summary, detected_date, raw_text, status
@@ -95,15 +97,6 @@ async function generateAndSaveGeneratedReport(userId, ingestBatchReportIds) {
   const reportData = await generateReport(reports, user);
   reportData.sourceReportIds = reports.map((r) => r.id);
 
-  const pdfBuffer = await generateSummaryPDF(reportData, user);
-  const pdfFilename = `summary-${userId}-${Date.now()}.pdf`;
-  const summariesDir = path.join(getUploadsRoot(), 'summaries');
-  if (!fs.existsSync(summariesDir)) {
-    fs.mkdirSync(summariesDir, { recursive: true });
-  }
-  const pdfPath = path.join(summariesDir, pdfFilename);
-  fs.writeFileSync(pdfPath, pdfBuffer);
-
   const reportName = getGeneratedReportName(user.company_name);
   const existingReport = await db.query(
     `SELECT id FROM generated_reports
@@ -112,27 +105,45 @@ async function generateAndSaveGeneratedReport(userId, ingestBatchReportIds) {
     [userId, reportName]
   );
 
+  let genId;
+  const jsonStr = JSON.stringify(reportData);
+
   if (existingReport.rows.length > 0) {
-    const id = existingReport.rows[0].id;
+    genId = existingReport.rows[0].id;
     await db.query(
       `UPDATE generated_reports
-       SET report_data = $1, file_path = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3`,
-      [JSON.stringify(reportData), pdfPath, id]
+       SET report_data = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [jsonStr, genId]
     );
-    console.log('[underwritlyIngest] updated generated_report', id);
-    return id;
+    console.log('[underwritlyIngest] updated generated_report data (json)', genId);
+  } else {
+    const ins = await db.query(
+      `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
+       VALUES ($1, $2, $3, NULL, $4)
+       RETURNING id`,
+      [userId, reportName, jsonStr, 'underwritly-insured-ingest']
+    );
+    genId = ins.rows[0].id;
+    console.log('[underwritlyIngest] created generated_report (json)', genId);
   }
 
-  const ins = await db.query(
-    `INSERT INTO generated_reports (user_id, report_name, report_data, file_path, template_used)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id`,
-    [userId, reportName, JSON.stringify(reportData), pdfPath, 'underwritly-insured-ingest']
-  );
-  const newId = ins.rows[0].id;
-  console.log('[underwritlyIngest] created generated_report', newId);
-  return newId;
+  try {
+    const pdfBuffer = await generateSummaryPDF(reportData, user);
+    const pdfFilename = `summary-${userId}-${Date.now()}.pdf`;
+    const summariesDir = path.join(getUploadsRoot(), 'summaries');
+    if (!fs.existsSync(summariesDir)) {
+      fs.mkdirSync(summariesDir, { recursive: true });
+    }
+    const pdfPath = path.join(summariesDir, pdfFilename);
+    fs.writeFileSync(pdfPath, pdfBuffer);
+    await db.query(`UPDATE generated_reports SET file_path = $1 WHERE id = $2`, [pdfPath, genId]);
+    console.log('[underwritlyIngest] attached summary PDF for generated_report', genId);
+  } catch (pdfErr) {
+    console.error('[underwritlyIngest] summary PDF failed; JSON report still saved', pdfErr && pdfErr.message);
+  }
+
+  return genId;
 }
 
 function normEmail(email) {
@@ -280,7 +291,7 @@ async function processUnderwritlyIngestWebhook(body) {
 
   let generatedReportId = null;
   try {
-    generatedReportId = await generateAndSaveGeneratedReport(userId, reportIds);
+    generatedReportId = await generateAndSaveGeneratedReport(userId);
   } catch (genErr) {
     console.error('[underwritlyIngest] generated_reports step failed (ifta_reports were saved)', genErr);
   }
@@ -290,4 +301,5 @@ async function processUnderwritlyIngestWebhook(body) {
 
 module.exports = {
   processUnderwritlyIngestWebhook,
+  generateAndSaveGeneratedReport,
 };
