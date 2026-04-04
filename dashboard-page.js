@@ -58,10 +58,6 @@
   function renderInsuredRows(user, rows) {
     if (!insuredsTbody) return;
     if (insuredsLoadingEl) insuredsLoadingEl.classList.add("hidden");
-    if (insuredsErrorEl) {
-      insuredsErrorEl.classList.add("hidden");
-      insuredsErrorEl.textContent = "";
-    }
     insuredsTbody.innerHTML = "";
     if (insuredsTableWrap) insuredsTableWrap.classList.add("hidden");
     if (insuredsEmptyEl) insuredsEmptyEl.classList.add("hidden");
@@ -83,12 +79,15 @@
           '" title="Open IFTA Summary with this insured">' +
           '<span class="dashboard-insured-ifta-icon" aria-hidden="true">⛽</span> IFTA</button>';
       }
-      var canResend = st === "pending_mfa" || st === "awaiting_upload";
-      var resendTitle = canResend
-        ? st === "pending_mfa"
+      var canResend =
+        st === "pending_mfa" || st === "awaiting_upload" || st === "completed";
+      var resendTitle = !canResend
+        ? "Resend not available for this status"
+        : st === "pending_mfa"
           ? "Resend verification code email"
-          : "Resend upload link email"
-        : "Reports already received — resend not available";
+          : st === "awaiting_upload"
+            ? "Resend upload link email"
+            : "Send a friendly reminder with a fresh upload link";
       var resendBtn =
         '<button type="button" class="btn btn-ghost btn-sm dashboard-insured-resend" data-insured-id="' +
         esc(String(id)) +
@@ -126,12 +125,14 @@
   }
 
   function refreshInsureds() {
-    if (!currentUser) return;
+    if (!currentUser) return Promise.resolve();
     if (insuredsErrorEl) {
       insuredsErrorEl.classList.add("hidden");
       insuredsErrorEl.textContent = "";
+      insuredsErrorEl.classList.add("field-error");
+      insuredsErrorEl.style.color = "";
     }
-    fetch("/api/session?include=insureds", {
+    return fetch("/api/session?include=insureds", {
       method: "GET",
       cache: "no-store",
       credentials: "same-origin",
@@ -309,14 +310,26 @@
           })
           .then(function (result) {
             if (result.ok && result.data && result.data.ok === true) {
-              refreshInsureds();
-              return;
+              var okMsg =
+                (result.data && result.data.message) || "Email sent.";
+              return refreshInsureds().then(function () {
+                if (insuredsErrorEl) {
+                  insuredsErrorEl.textContent = okMsg;
+                  insuredsErrorEl.classList.remove("hidden", "field-error");
+                  insuredsErrorEl.style.color = "#15803d";
+                  setTimeout(function () {
+                    insuredsErrorEl.classList.add("hidden", "field-error");
+                    insuredsErrorEl.style.color = "";
+                  }, 6000);
+                }
+              });
             }
             var msg =
               (result.data && result.data.error) || "Could not resend email.";
             if (insuredsErrorEl) {
               insuredsErrorEl.textContent = msg;
               insuredsErrorEl.classList.remove("hidden");
+              insuredsErrorEl.classList.add("field-error");
             } else {
               alert(msg);
             }

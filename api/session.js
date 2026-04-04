@@ -71,7 +71,7 @@ function publicUser(record) {
 
 function canLaunchIfta(record) {
   if (!record || !record.passwordHash) return false;
-  // Any signed-in broker can open the IFTA deployment (default: ifta-dev-underwritly via IFTA_DEPLOYMENT_URL).
+  // Any signed-in broker can open the IFTA deployment (IFTA_DEPLOYMENT_URL on the server).
   return true;
 }
 
@@ -177,6 +177,13 @@ module.exports = async function handler(req, res) {
         return sendJson(res, 403, {
           ok: false,
           error: "IFTA access is not enabled for this account.",
+        });
+      }
+      if (!iftaDeploymentUrl || !String(iftaDeploymentUrl).trim()) {
+        return sendJson(res, 503, {
+          ok: false,
+          error:
+            "IFTA URL is not configured. Set IFTA_DEPLOYMENT_URL on this Vercel project to your IFTA Summary production URL (e.g. https://your-ifta-app.vercel.app/reports).",
         });
       }
       var now = Math.floor(Date.now() / 1000);
