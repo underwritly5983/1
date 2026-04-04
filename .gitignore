@@ -9,6 +9,7 @@ node_modules/
 Thumbs.db
 *.log
 body.txt
+_style-import/
 
 .vercel
 .env*.local
